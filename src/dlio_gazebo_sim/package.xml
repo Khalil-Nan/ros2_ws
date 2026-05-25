@@ -11,6 +11,9 @@
   <exec_depend>direct_lidar_inertial_odometry</exec_depend>
   <exec_depend>elevation_mapping_cupy</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>graphnav_builder</exec_depend>
+  <exec_depend>graphnav_msgs</exec_depend>
+  <exec_depend>grid_map_msgs</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
@@ -18,6 +21,8 @@
   <exec_depend>ros_gz_bridge</exec_depend>
   <exec_depend>ros_gz_sim</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

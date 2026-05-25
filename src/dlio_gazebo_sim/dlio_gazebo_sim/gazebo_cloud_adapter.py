@@ -15,12 +15,14 @@ class GazeboCloudAdapter(Node):
         self.declare_parameter('frame_id', 'lidar')
         self.declare_parameter('min_range', 0.25)
         self.declare_parameter('max_range', 18.0)
+        self.declare_parameter('scan_period', 0.1)
 
         self.input_topic = self.get_parameter('input_topic').value
         self.output_topic = self.get_parameter('output_topic').value
         self.frame_id = self.get_parameter('frame_id').value
         self.min_range = float(self.get_parameter('min_range').value)
         self.max_range = float(self.get_parameter('max_range').value)
+        self.scan_period = float(self.get_parameter('scan_period').value)
 
         self.cloud_pub = self.create_publisher(PointCloud2, self.output_topic, 10)
         self.create_subscription(PointCloud2, self.input_topic, self.cloud_callback, 10)
@@ -45,8 +47,10 @@ class GazeboCloudAdapter(Node):
             points.append((x, y, z, intensity))
 
         packed = bytearray()
-        for point in points:
-            packed.extend(struct.pack('<ffff', *point))
+        denom = max(1, len(points) - 1)
+        for index, point in enumerate(points):
+            relative_time = self.scan_period * float(index) / float(denom)
+            packed.extend(struct.pack('<fffff', point[0], point[1], point[2], point[3], relative_time))
 
         adapted = PointCloud2()
         adapted.header = msg.header
@@ -58,9 +62,10 @@ class GazeboCloudAdapter(Node):
             PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
             PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
             PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
+            PointField(name='time', offset=16, datatype=PointField.FLOAT32, count=1),
         ]
         adapted.is_bigendian = False
-        adapted.point_step = 16
+        adapted.point_step = 20
         adapted.row_step = adapted.point_step * len(points)
         adapted.is_dense = True
         adapted.data = bytes(packed)

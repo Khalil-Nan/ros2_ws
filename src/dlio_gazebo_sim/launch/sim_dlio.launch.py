@@ -13,7 +13,8 @@ def generate_launch_description():
     dlio_pkg = FindPackageShare('direct_lidar_inertial_odometry')
     elevation_pkg = FindPackageShare('elevation_mapping_cupy')
 
-    world = PathJoinSubstitution([pkg, 'worlds', 'dlio_room.sdf'])
+    world_name = LaunchConfiguration('world')
+    world = PathJoinSubstitution([pkg, 'worlds', world_name])
     model_path = PathJoinSubstitution([pkg, 'models'])
 
     rviz = LaunchConfiguration('rviz')
@@ -23,8 +24,30 @@ def generate_launch_description():
     start_delay = LaunchConfiguration('start_delay')
     auto_drive = LaunchConfiguration('auto_drive')
     launch_elevation = LaunchConfiguration('launch_elevation')
+    launch_graphnav = LaunchConfiguration('launch_graphnav')
+    launch_graphnav_markers = LaunchConfiguration('launch_graphnav_markers')
+    launch_grid_threshold_markers = LaunchConfiguration('launch_grid_threshold_markers')
     use_synthetic_sensors = LaunchConfiguration('use_synthetic_sensors')
     use_gazebo_cloud_adapter = LaunchConfiguration('use_gazebo_cloud_adapter')
+    graphnav_grid_map_topic = LaunchConfiguration('graphnav_grid_map_topic')
+    graphnav_odom_topic = LaunchConfiguration('graphnav_odom_topic')
+    graphnav_topic = LaunchConfiguration('graphnav_topic')
+    graphnav_safe_threshold = LaunchConfiguration('graphnav_safe_threshold')
+    graphnav_local_map_radius = LaunchConfiguration('graphnav_local_map_radius')
+    graphnav_edge_radius = LaunchConfiguration('graphnav_edge_radius')
+    graphnav_num_samples = LaunchConfiguration('graphnav_num_samples')
+    graphnav_update_min_travel = LaunchConfiguration('graphnav_update_min_travel')
+    graphnav_update_free_radius_fraction = LaunchConfiguration('graphnav_update_free_radius_fraction')
+    graphnav_frontier_association_radius = LaunchConfiguration('graphnav_frontier_association_radius')
+    graphnav_publish_global_memory_markers = LaunchConfiguration('graphnav_publish_global_memory_markers')
+    graphnav_global_memory_marker_topic = LaunchConfiguration('graphnav_global_memory_marker_topic')
+    graphnav_global_memory_marker_stride = LaunchConfiguration('graphnav_global_memory_marker_stride')
+    graphnav_publish_global_memory_grid = LaunchConfiguration('graphnav_publish_global_memory_grid')
+    graphnav_global_memory_grid_topic = LaunchConfiguration('graphnav_global_memory_grid_topic')
+    graphnav_min_x = LaunchConfiguration('graphnav_min_x')
+    graphnav_max_x = LaunchConfiguration('graphnav_max_x')
+    graphnav_min_y = LaunchConfiguration('graphnav_min_y')
+    graphnav_max_y = LaunchConfiguration('graphnav_max_y')
 
     gazebo_gui = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -111,6 +134,7 @@ def generate_launch_description():
             'input_topic': '/points_raw/points',
             'output_topic': '/points_raw',
             'frame_id': 'lidar',
+            'scan_period': 0.1,
         }],
     )
 
@@ -128,16 +152,108 @@ def generate_launch_description():
         }],
     )
 
+    graphnav_builder = Node(
+        package='graphnav_builder',
+        executable='graphnav_builder',
+        name='graphnav_builder',
+        output='screen',
+        condition=IfCondition(launch_graphnav),
+        parameters=[{
+            'use_sim_time': True,
+            'odom_topic': graphnav_odom_topic,
+            'grid_map_topic': graphnav_grid_map_topic,
+            'nav_graph_topic': graphnav_topic,
+            'traversability_layer': 'traversability',
+            'observed_layer': 'elevation',
+            'trav_class': 'elevation_traversability',
+            'safe_threshold': graphnav_safe_threshold,
+            'local_map_radius': graphnav_local_map_radius,
+            'local_map_resolution': 0.1,
+            'max_free_radius': 4.0,
+            'traversable_radius': 0.5,
+            'frontier_association_radius': graphnav_frontier_association_radius,
+            'edge_radius': graphnav_edge_radius,
+            'num_samples': graphnav_num_samples,
+            'graph_update_min_travel': graphnav_update_min_travel,
+            'graph_update_free_radius_fraction': graphnav_update_free_radius_fraction,
+            'publish_global_memory_markers': graphnav_publish_global_memory_markers,
+            'global_memory_marker_topic': graphnav_global_memory_marker_topic,
+            'global_memory_marker_stride': graphnav_global_memory_marker_stride,
+            'publish_global_memory_grid': graphnav_publish_global_memory_grid,
+            'global_memory_grid_topic': graphnav_global_memory_grid_topic,
+            'random_seed': 7,
+            'min_x': graphnav_min_x,
+            'max_x': graphnav_max_x,
+            'min_y': graphnav_min_y,
+            'max_y': graphnav_max_y,
+        }],
+    )
+
+    nav_graph_markers = Node(
+        package='dlio_gazebo_sim',
+        executable='nav_graph_markers',
+        name='nav_graph_markers',
+        output='screen',
+        condition=IfCondition(launch_graphnav_markers),
+        parameters=[{
+            'use_sim_time': True,
+            'nav_graph_topic': graphnav_topic,
+            'marker_topic': '/nav_graph_markers',
+            'show_radii': True,
+            'show_ids': False,
+        }],
+    )
+
+    grid_threshold_markers = Node(
+        package='dlio_gazebo_sim',
+        executable='grid_threshold_markers',
+        name='grid_threshold_markers',
+        output='screen',
+        condition=IfCondition(launch_grid_threshold_markers),
+        parameters=[{
+            'use_sim_time': True,
+            'grid_map_topic': graphnav_grid_map_topic,
+            'marker_topic': '/grid_threshold_markers',
+            'traversability_layer': 'traversability',
+            'observed_layer': 'elevation',
+            'safe_threshold': graphnav_safe_threshold,
+            'sample_stride': 1,
+        }],
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument('rviz', default_value='true'),
         DeclareLaunchArgument('gz_gui', default_value='true'),
+        DeclareLaunchArgument('world', default_value='dlio_room.sdf'),
         DeclareLaunchArgument('linear_x', default_value='0.45'),
         DeclareLaunchArgument('angular_z', default_value='0.22'),
         DeclareLaunchArgument('start_delay', default_value='4.0'),
         DeclareLaunchArgument('auto_drive', default_value='false'),
         DeclareLaunchArgument('launch_elevation', default_value='true'),
+        DeclareLaunchArgument('launch_graphnav', default_value='true'),
+        DeclareLaunchArgument('launch_graphnav_markers', default_value='true'),
+        DeclareLaunchArgument('launch_grid_threshold_markers', default_value='false'),
         DeclareLaunchArgument('use_synthetic_sensors', default_value='false'),
         DeclareLaunchArgument('use_gazebo_cloud_adapter', default_value='true'),
+        DeclareLaunchArgument('graphnav_grid_map_topic', default_value='/elevation_mapping_node/elevation_map_raw'),
+        DeclareLaunchArgument('graphnav_odom_topic', default_value='/dlio/odom_node/odom'),
+        DeclareLaunchArgument('graphnav_topic', default_value='/nav_graph'),
+        DeclareLaunchArgument('graphnav_safe_threshold', default_value='0.2'),
+        DeclareLaunchArgument('graphnav_local_map_radius', default_value='4.5'),
+        DeclareLaunchArgument('graphnav_edge_radius', default_value='2.5'),
+        DeclareLaunchArgument('graphnav_num_samples', default_value='250'),
+        DeclareLaunchArgument('graphnav_update_min_travel', default_value='0.75'),
+        DeclareLaunchArgument('graphnav_update_free_radius_fraction', default_value='0.8'),
+        DeclareLaunchArgument('graphnav_frontier_association_radius', default_value='1.5'),
+        DeclareLaunchArgument('graphnav_publish_global_memory_markers', default_value='true'),
+        DeclareLaunchArgument('graphnav_global_memory_marker_topic', default_value='/global_traversability_markers'),
+        DeclareLaunchArgument('graphnav_global_memory_marker_stride', default_value='2'),
+        DeclareLaunchArgument('graphnav_publish_global_memory_grid', default_value='true'),
+        DeclareLaunchArgument('graphnav_global_memory_grid_topic', default_value='/global_traversability_grid'),
+        DeclareLaunchArgument('graphnav_min_x', default_value='-1000000000.0'),
+        DeclareLaunchArgument('graphnav_max_x', default_value='1000000000.0'),
+        DeclareLaunchArgument('graphnav_min_y', default_value='-1000000000.0'),
+        DeclareLaunchArgument('graphnav_max_y', default_value='1000000000.0'),
         SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', model_path),
         gazebo_gui,
         gazebo_headless,
@@ -147,4 +263,7 @@ def generate_launch_description():
         circle_cmd,
         dlio,
         elevation_mapping,
+        graphnav_builder,
+        nav_graph_markers,
+        grid_threshold_markers,
     ])

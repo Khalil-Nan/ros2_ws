@@ -33,6 +33,8 @@ def generate_launch_description():
                 'traversable_radius': 0.5,
                 'edge_radius': 8.0,
                 'num_samples': 1000,
+                'graph_update_min_travel': 0.75,
+                'graph_update_free_radius_fraction': 0.8,
                 'random_seed': 7,
             }],
         ),

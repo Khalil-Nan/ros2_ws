@@ -1,0 +1,1 @@
+/root/ros2_ws/src/nebula2-wildos-main/graphnav_msgs/msg/EdgeTraversability.msg

@@ -4,6 +4,8 @@ setup.py
 dlio_gazebo_sim/__init__.py
 dlio_gazebo_sim/circle_cmd.py
 dlio_gazebo_sim/gazebo_cloud_adapter.py
+dlio_gazebo_sim/grid_threshold_markers.py
+dlio_gazebo_sim/nav_graph_markers.py
 dlio_gazebo_sim/synthetic_dlio_sensors.py
 dlio_gazebo_sim.egg-info/PKG-INFO
 dlio_gazebo_sim.egg-info/SOURCES.txt
@@ -16,4 +18,5 @@ launch/sim_dlio.launch.py
 models/dlio_car/model.config
 models/dlio_car/model.sdf
 resource/dlio_gazebo_sim
+worlds/dlio_empty.sdf
 worlds/dlio_room.sdf
