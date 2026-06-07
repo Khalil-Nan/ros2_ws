@@ -212,6 +212,22 @@ class TraversabilityGrid:
                     break
         return frontiers
 
+    def unknown_frontier_cells_next_to_free(self, free_cells: Optional[Sequence[Cell]] = None) -> List[Tuple[Cell, Cell]]:
+        exterior_unknown = {self.flat_index(cell) for cell in self.exterior_unknown_cells}
+        frontiers: List[Tuple[Cell, Cell]] = []
+        seen_unknown = set()
+        candidates = free_cells if free_cells is not None else self.free_cells
+        for free_cell in candidates:
+            for neighbor in self.neighbors8(free_cell):
+                if not self.in_bounds_cell(neighbor):
+                    continue
+                neighbor_idx = self.flat_index(neighbor)
+                if neighbor_idx not in exterior_unknown or neighbor_idx in seen_unknown:
+                    continue
+                seen_unknown.add(neighbor_idx)
+                frontiers.append((neighbor, free_cell))
+        return frontiers
+
     def reachable_free_cells(self, seed_xy: Optional[XY]) -> List[Cell]:
         if seed_xy is None or not self.free_cells:
             return list(self.free_cells)
@@ -777,14 +793,14 @@ class SparseGraphBuilderNode(RclpyNode):
 
         for old_idx, node in enumerate(self.nodes):
             if not self.in_workspace_bounds(self.pose_xy(node.pose)):
-                continue
+                continue # 这里的workspace bounds是限制在某个矩形里面建图，目前是没有任何意义的，但保留这个检查以防未来添加了workspace bounds参数。
             cell = grid.xy_to_cell(self.pose_xy(node.pose))
             if cell is not None:
                 cell_idx = grid.flat_index(cell)
                 state = grid.state_at_cell(cell)
                 if state == grid.FREE:
                     node.free_radius = min(sdf_obstacle[cell_idx], sdf_unknown[cell_idx], self.max_free_radius)
-                    node.explored_radius = max(node.free_radius, sdf_unknown[cell_idx])
+                    node.explored_radius = max(node.explored_radius, sdf_unknown[cell_idx])
                 elif state == grid.OBSTACLE:
                     node.free_radius = 0.0
                 if node.free_radius <= 0.0:
@@ -847,21 +863,20 @@ class SparseGraphBuilderNode(RclpyNode):
     def update_frontier_nodes(self, grid: TraversabilityGrid, reachable_free_cells: Sequence[Cell]):
         # Algorithm 4: Detect and Update Frontier Nodes.
         for node in self.nodes:
-            kept_frontiers = []
+            if not node.is_frontier:
+                continue
+            kept_frontiers_cells = []
             for point in node.frontier_points:
                 xy = (point.x, point.y)
-                if not self.in_workspace_bounds(xy):
-                    continue
                 cell = grid.xy_to_cell(xy)
                 if cell is None or not grid.is_known(cell):
-                    kept_frontiers.append(point)
-            node.frontier_points = kept_frontiers
+                    kept_frontiers_cells.append(point)
+            node.frontier_points = kept_frontiers_cells
             node.is_frontier = bool(node.frontier_points)
 
-        for frontier_cell in grid.boundary_between_free_and_unknown(reachable_free_cells):
+        for frontier_cell, free_side_cell in grid.unknown_frontier_cells_next_to_free(reachable_free_cells):
             frontier_xy = grid.cell_to_xy(frontier_cell)
-            if not self.in_workspace_bounds(frontier_xy):
-                continue
+            free_side_xy = grid.cell_to_xy(free_side_cell)
             if any(self.distance_xy(frontier_xy, self.pose_xy(node.pose)) <= node.explored_radius for node in self.nodes):
                 continue
 
@@ -872,7 +887,7 @@ class SparseGraphBuilderNode(RclpyNode):
                 dist = self.distance_xy(node_xy, frontier_xy)
                 if dist > self.frontier_association_radius:
                     continue
-                if not grid.collision_free(node_xy, frontier_xy):
+                if not grid.collision_free(node_xy, free_side_xy):
                     continue
                 if dist < best_dist:
                     best_idx = idx

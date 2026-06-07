@@ -1,8 +1,8 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, SetEnvironmentVariable
-from launch.conditions import IfCondition, UnlessCondition
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, SetEnvironmentVariable, TimerAction
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import EnvironmentVariable, LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import EnvironmentVariable, LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -22,7 +22,16 @@ def generate_launch_description():
 
     rviz = LaunchConfiguration('rviz')
     gz_gui = LaunchConfiguration('gz_gui')
+    data_source = LaunchConfiguration('data_source')
     dlio_output = LaunchConfiguration('dlio_output')
+    pointcloud_topic = LaunchConfiguration('pointcloud_topic')
+    imu_topic = LaunchConfiguration('imu_topic')
+    rosbag_path = LaunchConfiguration('rosbag_path')
+    rosbag_pointcloud_topic = LaunchConfiguration('rosbag_pointcloud_topic')
+    rosbag_imu_topic = LaunchConfiguration('rosbag_imu_topic')
+    rosbag_rate = LaunchConfiguration('rosbag_rate')
+    rosbag_loop = LaunchConfiguration('rosbag_loop')
+    rosbag_start_delay = LaunchConfiguration('rosbag_start_delay')
     linear_x = LaunchConfiguration('linear_x')
     angular_z = LaunchConfiguration('angular_z')
     start_delay = LaunchConfiguration('start_delay')
@@ -59,6 +68,8 @@ def generate_launch_description():
     graphnav_max_x = LaunchConfiguration('graphnav_max_x')
     graphnav_min_y = LaunchConfiguration('graphnav_min_y')
     graphnav_max_y = LaunchConfiguration('graphnav_max_y')
+    gazebo_source = PythonExpression(["'", data_source, "'.lower() == 'gazebo'"])
+    rosbag_source = PythonExpression(["'", data_source, "'.lower() == 'rosbag'"])
 
     gazebo_gui = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -68,7 +79,9 @@ def generate_launch_description():
             'gz_args': ['-r ', world],
             'on_exit_shutdown': 'True',
         }.items(),
-        condition=IfCondition(gz_gui),
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() == 'gazebo' and '", gz_gui, "'.lower() == 'true'"
+        ])),
     )
 
     gazebo_headless = IncludeLaunchDescription(
@@ -79,7 +92,9 @@ def generate_launch_description():
             'gz_args': ['-r -s ', world],
             'on_exit_shutdown': 'True',
         }.items(),
-        condition=UnlessCondition(gz_gui),
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() == 'gazebo' and '", gz_gui, "'.lower() != 'true'"
+        ])),
     )
 
     dlio = IncludeLaunchDescription(
@@ -88,10 +103,48 @@ def generate_launch_description():
         ),
         launch_arguments={
             'rviz': rviz,
-            'pointcloud_topic': '/points_raw',
-            'imu_topic': '/imu_raw',
+            'pointcloud_topic': pointcloud_topic,
+            'imu_topic': imu_topic,
             'dlio_output': dlio_output,
         }.items(),
+    )
+
+    rosbag_play = TimerAction(
+        period=rosbag_start_delay,
+        actions=[
+            ExecuteProcess(
+                cmd=[
+                    'ros2', 'bag', 'play', rosbag_path,
+                    '--clock',
+                    '--rate', rosbag_rate,
+                    '--remap',
+                    [rosbag_pointcloud_topic, ':=', pointcloud_topic],
+                    [rosbag_imu_topic, ':=', imu_topic],
+                ],
+                name='rosbag_play',
+                output='screen',
+                condition=IfCondition(PythonExpression([
+                    "'", rosbag_loop, "'.lower() != 'true'"
+                ])),
+            ),
+            ExecuteProcess(
+                cmd=[
+                    'ros2', 'bag', 'play', rosbag_path,
+                    '--clock',
+                    '--loop',
+                    '--rate', rosbag_rate,
+                    '--remap',
+                    [rosbag_pointcloud_topic, ':=', pointcloud_topic],
+                    [rosbag_imu_topic, ':=', imu_topic],
+                ],
+                name='rosbag_play_loop',
+                output='screen',
+                condition=IfCondition(PythonExpression([
+                    "'", rosbag_loop, "'.lower() == 'true'"
+                ])),
+            ),
+        ],
+        condition=IfCondition(rosbag_source),
     )
 
     elevation_mapping = IncludeLaunchDescription(
@@ -125,17 +178,20 @@ def generate_launch_description():
             '/wildos/right/color/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
         ],
         output='screen',
+        condition=IfCondition(gazebo_source),
     )
 
     synthetic_sensors = Node(
         package='dlio_gazebo_sim',
         executable='synthetic_dlio_sensors',
         output='screen',
-        condition=IfCondition(use_synthetic_sensors),
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() == 'gazebo' and '", use_synthetic_sensors, "'.lower() == 'true'"
+        ])),
         parameters=[{
             'use_sim_time': True,
-            'pointcloud_topic': '/points_raw',
-            'imu_topic': '/imu_raw',
+            'pointcloud_topic': pointcloud_topic,
+            'imu_topic': imu_topic,
             'start_delay': start_delay,
             'linear_x': linear_x,
             'angular_z': angular_z,
@@ -146,11 +202,13 @@ def generate_launch_description():
         package='dlio_gazebo_sim',
         executable='gazebo_cloud_adapter',
         output='screen',
-        condition=IfCondition(use_gazebo_cloud_adapter),
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() == 'gazebo' and '", use_gazebo_cloud_adapter, "'.lower() == 'true'"
+        ])),
         parameters=[{
             'use_sim_time': True,
             'input_topic': '/points_raw/points',
-            'output_topic': '/points_raw',
+            'output_topic': pointcloud_topic,
             'frame_id': 'lidar',
             'scan_period': 0.1,
         }],
@@ -160,7 +218,9 @@ def generate_launch_description():
         package='dlio_gazebo_sim',
         executable='circle_cmd',
         output='screen',
-        condition=IfCondition(auto_drive),
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() == 'gazebo' and '", auto_drive, "'.lower() == 'true'"
+        ])),
         parameters=[{
             'use_sim_time': True,
             'cmd_vel_topic': '/cmd_vel',
@@ -348,7 +408,24 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('rviz', default_value='true'),
         DeclareLaunchArgument('gz_gui', default_value='true'),
+        DeclareLaunchArgument(
+            'data_source',
+            default_value='gazebo',
+            description='Sensor data source: gazebo or rosbag',
+        ),
         DeclareLaunchArgument('dlio_output', default_value='log'),
+        DeclareLaunchArgument('pointcloud_topic', default_value='/points_raw'),
+        DeclareLaunchArgument('imu_topic', default_value='/imu_raw'),
+        DeclareLaunchArgument(
+            'rosbag_path',
+            default_value='/root/ros2_ws/data/sequences/2024-03-14-blenheim-palace-04/raw/ros2bag/1710408895_2024-03-14-09-44-02_1',
+            description='Path to the rosbag2 directory used when data_source:=rosbag',
+        ),
+        DeclareLaunchArgument('rosbag_pointcloud_topic', default_value='/hesai/pandar'),
+        DeclareLaunchArgument('rosbag_imu_topic', default_value='/alphasense_driver_ros/imu'),
+        DeclareLaunchArgument('rosbag_rate', default_value='1.0'),
+        DeclareLaunchArgument('rosbag_loop', default_value='false'),
+        DeclareLaunchArgument('rosbag_start_delay', default_value='2.0'),
         DeclareLaunchArgument('world', default_value='dlio_room.sdf'),
         DeclareLaunchArgument('linear_x', default_value='0.45'),
         DeclareLaunchArgument('angular_z', default_value='0.22'),
@@ -398,6 +475,7 @@ def generate_launch_description():
         gazebo_cloud_adapter,
         synthetic_sensors,
         circle_cmd,
+        rosbag_play,
         dlio,
         elevation_mapping,
         graphnav_builder,
