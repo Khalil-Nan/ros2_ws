@@ -147,6 +147,7 @@
         </material>
       </visual>
       <sensor name="front_camera_sensor" type="camera">
+        <pose>0 0 0 0 0 3.14159265359</pose>
         <topic>/wildos/front/color/image_raw</topic>
         <update_rate>10</update_rate>
         <always_on>true</always_on>
@@ -191,6 +192,7 @@
         </material>
       </visual>
       <sensor name="left_camera_sensor" type="camera">
+        <pose>0 0 0 0 0 3.14159265359</pose>
         <topic>/wildos/left/color/image_raw</topic>
         <update_rate>10</update_rate>
         <always_on>true</always_on>
@@ -235,6 +237,7 @@
         </material>
       </visual>
       <sensor name="right_camera_sensor" type="camera">
+        <pose>0 0 0 0 0 3.14159265359</pose>
         <topic>/wildos/right/color/image_raw</topic>
         <update_rate>10</update_rate>
         <always_on>true</always_on>

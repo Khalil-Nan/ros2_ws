@@ -25,6 +25,7 @@ def generate_launch_description():
     gz_gui = LaunchConfiguration('gz_gui')
     data_source = LaunchConfiguration('data_source')
     dlio_output = LaunchConfiguration('dlio_output')
+    gazebo_dlio_extra_params = LaunchConfiguration('gazebo_dlio_extra_params')
     pointcloud_topic = LaunchConfiguration('pointcloud_topic')
     imu_topic = LaunchConfiguration('imu_topic')
     rosbag_path = LaunchConfiguration('rosbag_path')
@@ -56,6 +57,7 @@ def generate_launch_description():
     triangulation_config = LaunchConfiguration('triangulation_config')
     use_synthetic_sensors = LaunchConfiguration('use_synthetic_sensors')
     use_gazebo_cloud_adapter = LaunchConfiguration('use_gazebo_cloud_adapter')
+    show_gazebo_base_link = LaunchConfiguration('show_gazebo_base_link')
     graphnav_grid_map_topic = LaunchConfiguration('graphnav_grid_map_topic')
     graphnav_odom_topic = LaunchConfiguration('graphnav_odom_topic')
     graphnav_topic = LaunchConfiguration('graphnav_topic')
@@ -113,6 +115,7 @@ def generate_launch_description():
             'pointcloud_topic': pointcloud_topic,
             'imu_topic': imu_topic,
             'dlio_output': dlio_output,
+            'dlio_extra_params': gazebo_dlio_extra_params,
         }.items(),
         condition=IfCondition(gazebo_source),
     )
@@ -281,6 +284,22 @@ def generate_launch_description():
         }],
     )
 
+    gazebo_odom_tf = Node(
+        package='dlio_gazebo_sim',
+        executable='gazebo_odom_tf',
+        name='gazebo_odom_tf',
+        output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() == 'gazebo' and '", show_gazebo_base_link, "'.lower() == 'true'"
+        ])),
+        parameters=[{
+            'use_sim_time': True,
+            'odom_topic': '/gazebo/odom',
+            'parent_frame': 'odom',
+            'child_frame': 'gazebo_base_link',
+        }],
+    )
+
     circle_cmd = Node(
         package='dlio_gazebo_sim',
         executable='circle_cmd',
@@ -366,14 +385,14 @@ def generate_launch_description():
         }],
     )
 
-    wildos_front_camera_tf = Node(
+    wildos_front_camera_link_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        name='wildos_front_camera_tf',
+        name='wildos_front_camera_link_tf',
         arguments=[
             '0.36', '0.0', '0.24',
-            '-0.5', '0.5', '-0.5', '0.5',
-            'base_link', 'wildos_front_camera_color_optical_frame',
+            '0.0', '0.0', '0.0', '1.0',
+            'base_link', 'wildos_front_camera_link',
         ],
         output='screen',
         additional_env={
@@ -382,26 +401,66 @@ def generate_launch_description():
         },
     )
 
-    wildos_left_camera_tf = Node(
+    wildos_front_camera_optical_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        name='wildos_left_camera_tf',
+        name='wildos_front_camera_optical_tf',
+        arguments=[
+            '0.0', '0.0', '0.0',
+            '-0.5', '0.5', '-0.5', '0.5',
+            'wildos_front_camera_link', 'wildos_front_camera_color_optical_frame',
+        ],
+        output='screen',
+        additional_env={
+            'PYTHONPATH': [wildos_source_path, ':', EnvironmentVariable('PYTHONPATH', default_value='')],
+            'MPLCONFIGDIR': '/tmp/matplotlib',
+        },
+    )
+
+    wildos_left_camera_link_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='wildos_left_camera_link_tf',
         arguments=[
             '0.08', '0.25', '0.24',
-            '-0.70710678', '0.0', '0.0', '0.70710678',
-            'base_link', 'wildos_left_camera_color_optical_frame',
+            '0.0', '0.0', '0.70710678', '0.70710678',
+            'base_link', 'wildos_left_camera_link',
         ],
         output='screen',
     )
 
-    wildos_right_camera_tf = Node(
+    wildos_left_camera_optical_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        name='wildos_right_camera_tf',
+        name='wildos_left_camera_optical_tf',
+        arguments=[
+            '0.0', '0.0', '0.0',
+            '-0.5', '0.5', '-0.5', '0.5',
+            'wildos_left_camera_link', 'wildos_left_camera_color_optical_frame',
+        ],
+        output='screen',
+    )
+
+    wildos_right_camera_link_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='wildos_right_camera_link_tf',
         arguments=[
             '0.08', '-0.25', '0.24',
-            '0.0', '0.70710678', '-0.70710678', '0.0',
-            'base_link', 'wildos_right_camera_color_optical_frame',
+            '0.0', '0.0', '-0.70710678', '0.70710678',
+            'base_link', 'wildos_right_camera_link',
+        ],
+        output='screen',
+    )
+
+    wildos_right_camera_optical_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='wildos_right_camera_optical_tf',
+        arguments=[
+            '0.0', '0.0', '0.0',
+            '-0.5', '0.5', '-0.5', '0.5',
+            'wildos_right_camera_link', 'wildos_right_camera_color_optical_frame',
         ],
         output='screen',
     )
@@ -481,6 +540,11 @@ def generate_launch_description():
             description='Sensor data source: gazebo or rosbag',
         ),
         DeclareLaunchArgument('dlio_output', default_value='log'),
+        DeclareLaunchArgument(
+            'gazebo_dlio_extra_params',
+            default_value=PathJoinSubstitution([pkg, 'config', 'dlio_gazebo_extrinsics.yaml']),
+            description='DLIO extrinsic override used automatically when data_source:=gazebo.',
+        ),
         DeclareLaunchArgument('pointcloud_topic', default_value='/points_raw'),
         DeclareLaunchArgument('imu_topic', default_value='/imu_raw'),
         DeclareLaunchArgument(
@@ -541,6 +605,11 @@ def generate_launch_description():
         DeclareLaunchArgument('triangulation_config', default_value='dlio_gazebo_triangulation.yaml'),
         DeclareLaunchArgument('use_synthetic_sensors', default_value='false'),
         DeclareLaunchArgument('use_gazebo_cloud_adapter', default_value='true'),
+        DeclareLaunchArgument(
+            'show_gazebo_base_link',
+            default_value='true',
+            description='Publish Gazebo ground-truth odometry as odom->gazebo_base_link for RViz comparison.',
+        ),
         DeclareLaunchArgument('graphnav_grid_map_topic', default_value='/elevation_mapping_node/elevation_map_raw'),
         DeclareLaunchArgument('graphnav_odom_topic', default_value='/dlio/odom_node/odom'),
         DeclareLaunchArgument('graphnav_topic', default_value='/nav_graph'),
@@ -570,6 +639,7 @@ def generate_launch_description():
         gazebo_headless,
         bridge,
         gazebo_cloud_adapter,
+        gazebo_odom_tf,
         synthetic_sensors,
         circle_cmd,
         rosbag_wildos_camera_bridge,
@@ -582,9 +652,12 @@ def generate_launch_description():
         graphnav_builder,
         nav_graph_markers,
         grid_threshold_markers,
-        wildos_front_camera_tf,
-        wildos_left_camera_tf,
-        wildos_right_camera_tf,
+        wildos_front_camera_link_tf,
+        wildos_front_camera_optical_tf,
+        wildos_left_camera_link_tf,
+        wildos_left_camera_optical_tf,
+        wildos_right_camera_link_tf,
+        wildos_right_camera_optical_tf,
         wildos,
         explorfm_probe,
         obj_mask_triangulation,
