@@ -42,6 +42,20 @@ def generate_launch_description():
     rosbag_deskewed_lidar_frame = LaunchConfiguration('rosbag_deskewed_lidar_frame')
     rosbag_elevation_config = LaunchConfiguration('rosbag_elevation_config')
     use_rosbag_deskewed_lidar_bridge = LaunchConfiguration('use_rosbag_deskewed_lidar_bridge')
+    go2_rosbag_path = LaunchConfiguration('go2_rosbag_path')
+    go2_pointcloud_topic = LaunchConfiguration('go2_pointcloud_topic')
+    go2_imu_topic = LaunchConfiguration('go2_imu_topic')
+    go2_adapter_input_topic = LaunchConfiguration('go2_adapter_input_topic')
+    go2_rosbag_rate = LaunchConfiguration('go2_rosbag_rate')
+    go2_rosbag_loop = LaunchConfiguration('go2_rosbag_loop')
+    go2_rosbag_start_offset = LaunchConfiguration('go2_rosbag_start_offset')
+    go2_rosbag_start_delay = LaunchConfiguration('go2_rosbag_start_delay')
+    go2_rosbag_playback_duration = LaunchConfiguration('go2_rosbag_playback_duration')
+    go2_dlio_extra_params = LaunchConfiguration('go2_dlio_extra_params')
+    go2_deskewed_lidar_topic = LaunchConfiguration('go2_deskewed_lidar_topic')
+    go2_deskewed_lidar_frame = LaunchConfiguration('go2_deskewed_lidar_frame')
+    go2_elevation_config = LaunchConfiguration('go2_elevation_config')
+    go2_acceleration_scale = LaunchConfiguration('go2_acceleration_scale')
     linear_x = LaunchConfiguration('linear_x')
     angular_z = LaunchConfiguration('angular_z')
     start_delay = LaunchConfiguration('start_delay')
@@ -123,6 +137,7 @@ def generate_launch_description():
 
     gazebo_source = PythonExpression(["'", data_source, "'.lower() == 'gazebo'"])
     rosbag_source = PythonExpression(["'", data_source, "'.lower() == 'rosbag'"])
+    go2_rosbag_source = PythonExpression(["'", data_source, "'.lower() == 'go2_rosbag'"])
 
     gazebo_gui = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -178,6 +193,20 @@ def generate_launch_description():
         condition=IfCondition(rosbag_source),
     )
 
+    dlio_go2_rosbag = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([dlio_pkg, 'launch', 'dlio.launch.py'])
+        ),
+        launch_arguments={
+            'rviz': rviz,
+            'pointcloud_topic': pointcloud_topic,
+            'imu_topic': imu_topic,
+            'dlio_output': dlio_output,
+            'dlio_extra_params': go2_dlio_extra_params,
+        }.items(),
+        condition=IfCondition(go2_rosbag_source),
+    )
+
     rosbag_play = TimerAction(
         period=rosbag_start_delay,
         actions=[
@@ -218,6 +247,63 @@ def generate_launch_description():
         condition=IfCondition(rosbag_source),
     )
 
+    go2_rosbag_play = TimerAction(
+        period=go2_rosbag_start_delay,
+        actions=[
+            ExecuteProcess(
+                cmd=[
+                    'ros2', 'bag', 'play', go2_rosbag_path,
+                    '--clock',
+                    '--start-offset', go2_rosbag_start_offset,
+                    '--playback-duration', go2_rosbag_playback_duration,
+                    '--rate', go2_rosbag_rate,
+                    '--remap',
+                    [go2_pointcloud_topic, ':=', pointcloud_topic],
+                    [go2_imu_topic, ':=', go2_adapter_input_topic],
+                ],
+                name='go2_rosbag_play',
+                output='screen',
+                condition=IfCondition(PythonExpression([
+                    "'", go2_rosbag_loop, "'.lower() != 'true'"
+                ])),
+            ),
+            ExecuteProcess(
+                cmd=[
+                    'ros2', 'bag', 'play', go2_rosbag_path,
+                    '--clock',
+                    '--loop',
+                    '--start-offset', go2_rosbag_start_offset,
+                    '--playback-duration', go2_rosbag_playback_duration,
+                    '--rate', go2_rosbag_rate,
+                    '--remap',
+                    [go2_pointcloud_topic, ':=', pointcloud_topic],
+                    [go2_imu_topic, ':=', go2_adapter_input_topic],
+                ],
+                name='go2_rosbag_play_loop',
+                output='screen',
+                condition=IfCondition(PythonExpression([
+                    "'", go2_rosbag_loop, "'.lower() == 'true'"
+                ])),
+            ),
+        ],
+        condition=IfCondition(go2_rosbag_source),
+    )
+
+    go2_livox_imu_adapter = Node(
+        package='dlio_gazebo_sim',
+        executable='livox_imu_adapter',
+        name='go2_livox_imu_adapter',
+        output='screen',
+        condition=IfCondition(go2_rosbag_source),
+        parameters=[{
+            'use_sim_time': True,
+            'input_topic': go2_adapter_input_topic,
+            'output_topic': imu_topic,
+            'output_frame': 'livox_imu_frame',
+            'acceleration_scale': ParameterValue(go2_acceleration_scale, value_type=float),
+        }],
+    )
+
     rosbag_wildos_camera_bridge = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([wildos_bridge_pkg, 'launch', 'alphasense_to_wildos.launch.py'])
@@ -242,6 +328,23 @@ def generate_launch_description():
             'input_topic': '/dlio/odom_node/pointcloud/deskewed',
             'output_topic': rosbag_deskewed_lidar_topic,
             'target_frame': rosbag_deskewed_lidar_frame,
+        }],
+    )
+
+    go2_deskewed_lidar_bridge = Node(
+        package='dlio_gazebo_sim',
+        executable='odom_cloud_to_lidar_frame',
+        name='go2_odom_cloud_to_lidar_frame',
+        output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() == 'go2_rosbag' and '",
+            launch_elevation, "'.lower() == 'true'"
+        ])),
+        parameters=[{
+            'use_sim_time': True,
+            'input_topic': '/dlio/odom_node/pointcloud/deskewed',
+            'output_topic': go2_deskewed_lidar_topic,
+            'target_frame': go2_deskewed_lidar_frame,
         }],
     )
 
@@ -270,6 +373,20 @@ def generate_launch_description():
         }.items(),
         condition=IfCondition(PythonExpression([
             "'", data_source, "'.lower() == 'rosbag' and '", launch_elevation, "'.lower() == 'true'"
+        ])),
+    )
+
+    elevation_mapping_go2_rosbag = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([elevation_pkg, 'launch', 'elevation_mapping.launch.py'])
+        ),
+        launch_arguments={
+            'robot_config': go2_elevation_config,
+            'launch_rviz': 'false',
+            'use_sim_time': 'true',
+        }.items(),
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() == 'go2_rosbag' and '", launch_elevation, "'.lower() == 'true'"
         ])),
     )
 
@@ -711,7 +828,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'data_source',
             default_value='gazebo',
-            description='Sensor data source: gazebo or rosbag',
+            description='Sensor data source: gazebo, rosbag (Oxford), or go2_rosbag',
         ),
         DeclareLaunchArgument('dlio_output', default_value='log'),
         DeclareLaunchArgument(
@@ -761,6 +878,40 @@ def generate_launch_description():
             description='Start playback this many seconds after the beginning of the bag.',
         ),
         DeclareLaunchArgument('rosbag_start_delay', default_value='2.0'),
+        DeclareLaunchArgument(
+            'go2_rosbag_path',
+            default_value='/root/ros2_ws/data/sequences/go2_full_debug_2026-06-21_060201/go2_full_debug_2026-06-21_060201_0.db3',
+            description='Path to the Go2 Livox rosbag2 database.',
+        ),
+        DeclareLaunchArgument('go2_pointcloud_topic', default_value='/livox/lidar'),
+        DeclareLaunchArgument('go2_imu_topic', default_value='/livox/imu'),
+        DeclareLaunchArgument(
+            'go2_adapter_input_topic',
+            default_value='/go2/livox/imu_raw_g',
+            description='Private topic carrying the unscaled Livox acceleration in g.',
+        ),
+        DeclareLaunchArgument('go2_rosbag_rate', default_value='1.0'),
+        DeclareLaunchArgument('go2_rosbag_loop', default_value='false'),
+        DeclareLaunchArgument('go2_rosbag_start_offset', default_value='0.0'),
+        DeclareLaunchArgument('go2_rosbag_start_delay', default_value='2.0'),
+        DeclareLaunchArgument(
+            'go2_rosbag_playback_duration',
+            default_value='-1',
+            description='Optional playback duration in seconds; -1 plays the complete Go2 bag.',
+        ),
+        DeclareLaunchArgument(
+            'go2_dlio_extra_params',
+            default_value=PathJoinSubstitution([pkg, 'config', 'dlio_go2_livox_rosbag.yaml']),
+            description='Go2-specific DLIO frames and provisional Livox extrinsics.',
+        ),
+        DeclareLaunchArgument('go2_deskewed_lidar_topic', default_value='/points_deskewed_lidar'),
+        DeclareLaunchArgument('go2_deskewed_lidar_frame', default_value='livox_frame'),
+        DeclareLaunchArgument('go2_elevation_config', default_value='dlio_gazebo/go2_livox.yaml'),
+        DeclareLaunchArgument(
+            'go2_acceleration_scale',
+            default_value='9.80665',
+            description='Scale Livox accelerometer samples from g to m/s^2.',
+        ),
         DeclareLaunchArgument('world', default_value='dlio_room.sdf'),
         DeclareLaunchArgument('linear_x', default_value='0.45'),
         DeclareLaunchArgument('angular_z', default_value='0.22'),
@@ -869,11 +1020,16 @@ def generate_launch_description():
         circle_cmd,
         rosbag_wildos_camera_bridge,
         rosbag_play,
+        go2_rosbag_play,
+        go2_livox_imu_adapter,
         dlio_gazebo,
         dlio_rosbag,
+        dlio_go2_rosbag,
         rosbag_deskewed_lidar_bridge,
+        go2_deskewed_lidar_bridge,
         elevation_mapping_gazebo,
         elevation_mapping_rosbag,
+        elevation_mapping_go2_rosbag,
         graphnav_builder,
         nav_graph_markers,
         grid_threshold_markers,
