@@ -549,7 +549,7 @@ class SparseGraphBuilderNode(RclpyNode):
         self.declare_parameter('local_map_radius', 10.0)
         self.declare_parameter('local_map_resolution', 0.1)
         self.declare_parameter('max_free_radius', 4.0)
-        self.declare_parameter('traversable_radius', 0.5)
+        self.declare_parameter('traversable_radius', 0.25)
         self.declare_parameter('frontier_association_radius', 1.5)
         self.declare_parameter('edge_radius', 8.0)
         self.declare_parameter('num_samples', 1000)

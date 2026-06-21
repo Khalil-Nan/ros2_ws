@@ -335,6 +335,7 @@ class WildOS_Nav(TFLookupSubscriber):
         self.latest_image_msgs[cam_idx] = msg
 
     def camera_info_callback(self, cam_idx, msg):
+        msg.header.frame_id = self.cam_tf_frame.format(CAMERA_MAPPING[cam_idx])
         self.latest_camera_info[cam_idx] = msg
 
     def odom_callback(self, msg):
