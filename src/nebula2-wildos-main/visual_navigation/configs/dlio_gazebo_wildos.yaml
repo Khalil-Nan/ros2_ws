@@ -33,7 +33,7 @@ goal_w: 3.0
 reachability_w: 2.0
 scoring_method: "MULTIPLICATIVE"
 reach_scale: 0.25
-compute_paths: false
+compute_paths: true
 
 # ROS2 frames and topics for dlio_gazebo_sim.
 parent_frame: odom
