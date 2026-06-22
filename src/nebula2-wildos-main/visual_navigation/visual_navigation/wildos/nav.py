@@ -8,6 +8,7 @@ from visualization_msgs.msg import MarkerArray
 from cv_bridge import CvBridge
 from object_search_msgs.msg import ObjectMaskWithTf
 
+from copy import deepcopy
 from pathlib import Path
 import time
 from omegaconf import OmegaConf
@@ -296,59 +297,104 @@ class WildOS_Nav(TFLookupSubscriber):
             )
 
     def init_subscribers(self, config):
-
         cameraimg_topic_str = config.camera_img_topic
         camerainfo_topic_str = config.camera_info_topic
         img_msg_type = CompressedImage if self.using_compressed_imgs else ImageMsg
 
         self.camera_subs = {}
+        self.camera_info_subs = {}
+        self.latest_camera_info = [None] * self.num_cameras
         for i in range(self.num_cameras):
-            self.camera_subs[i] = {
-                "image": Subscriber(self, img_msg_type, cameraimg_topic_str.format(CAMERA_MAPPING[i]), qos_profile=config.qos_history_depth),
-                "info": Subscriber(self, CameraInfo, camerainfo_topic_str.format(CAMERA_MAPPING[i]), qos_profile=config.qos_history_depth)
-            }
-        self.odom_sub = Subscriber(self, Odometry, config.odometry_topic, qos_profile=config.qos_history_depth)
-        self.navgraph_sub = Subscriber(self, NavigationGraph, config.navigation_graph_topic, qos_profile=config.qos_history_depth)
+            self.camera_subs[i] = Subscriber(
+                self,
+                img_msg_type,
+                cameraimg_topic_str.format(CAMERA_MAPPING[i]),
+                qos_profile=config.qos_history_depth
+            )
+            self.camera_info_subs[i] = self.create_subscription(
+                CameraInfo,
+                camerainfo_topic_str.format(CAMERA_MAPPING[i]),
+                lambda msg, camera_idx=i: self.camera_info_callback(camera_idx, msg),
+                config.qos_history_depth
+            )
 
-        ts_subs = [self.odom_sub, self.navgraph_sub]
-        for i in range(self.num_cameras):
-            ts_subs.append(self.camera_subs[i]["image"])
-            ts_subs.append(self.camera_subs[i]["info"])
+        self.odom_sub = Subscriber(self, Odometry, config.odometry_topic, qos_profile=config.qos_history_depth)
+        self.latest_navgraph = None
+        self.navgraph_sub = self.create_subscription(
+            NavigationGraph,
+            config.navigation_graph_topic,
+            self.navgraph_callback,
+            config.qos_history_depth
+        )
+        self._warned_missing_navgraph = False
+        self._warned_missing_camera_info = False
+
+        # Only synchronize dynamic sensor data. CameraInfo changes rarely, while
+        # NavigationGraph can arrive seconds after the sensor data used to build it.
+        ts_subs = [self.odom_sub]
+        ts_subs.extend(self.camera_subs[i] for i in range(self.num_cameras))
 
         self.ts = ApproximateTimeSynchronizer(
             ts_subs, queue_size=config.syncsub_queue_size, slop=config.syncsub_slop
         )
         self.ts.registerCallback(self.listener_callback)
-    
-   def listener_callback(self, odom_msg, navgraph_msg, *msgs):
+
+    def camera_info_callback(self, camera_idx, camera_info_msg):
+        self.latest_camera_info[camera_idx] = camera_info_msg
+        self._warned_missing_camera_info = False
+
+    def navgraph_callback(self, navgraph_msg):
+        self.latest_navgraph = navgraph_msg
+        self._warned_missing_navgraph = False
+
+    def listener_callback(self, odom_msg, *image_msgs):
+        if self.latest_navgraph is None:
+            if not self._warned_missing_navgraph:
+                self.get_logger().warning("Waiting for the first navigation graph")
+                self._warned_missing_navgraph = True
+            return
+
+        missing_camera_info = [
+            CAMERA_MAPPING[i]
+            for i, camera_info_msg in enumerate(self.latest_camera_info)
+            if camera_info_msg is None
+        ]
+        if missing_camera_info:
+            if not self._warned_missing_camera_info:
+                self.get_logger().warning(
+                    f"Waiting for CameraInfo from: {', '.join(missing_camera_info)}"
+                )
+                self._warned_missing_camera_info = True
+            return
+
         self.clbk_cntr += 1
         self.get_logger().info(f"Received callback {self.clbk_cntr}")
 
         assert odom_msg.header.frame_id == self.global_frame, \
             f"Odom frame {odom_msg.header.frame_id} does not match global frame {self.global_frame}"
-        # assert navgraph_msg.header.frame_id == self.global_frame, \
-        #     f"Navgraph frame {navgraph_msg.header.frame_id} does not match global frame {self.global_frame}"
 
         self.msg_buffer.add_msg(
             msg={
                 "odom": odom_msg,
-                "navgraph": navgraph_msg,
-                "cam_msgs": msgs
+                "navgraph": self.latest_navgraph,
+                "image_msgs": image_msgs,
+                "camera_info_msgs": list(self.latest_camera_info)
             },
             stamp=odom_msg.header.stamp,
         )
 
     def do_processing(self, msg, tf_data):
-        
-        print(f"Started Heavy")
+        heavy_start = time.perf_counter()
+        self.get_logger().info("Started Heavy")
 
         # Extract messages
         odom_msg = msg["odom"]
         navgraph_msg = msg["navgraph"]
-        msgs = msg["cam_msgs"]
+        image_msgs = msg["image_msgs"]
+        cam_info_msgs = msg["camera_info_msgs"]
 
         # Extract camera images and info
-        rgb_imgs, cam_info_msgs = [], []
+        rgb_imgs = []
         for i in range(self.num_cameras):
             if self.using_compressed_imgs:
                 convert_func = self.br.compressed_imgmsg_to_cv2
@@ -357,13 +403,12 @@ class WildOS_Nav(TFLookupSubscriber):
 
             if self.cam_inverted:
                 rgb_imgs.append(
-                    np.rot90(convert_func(msgs[i * 2], desired_encoding='rgb8'), k=2)
+                    np.rot90(convert_func(image_msgs[i], desired_encoding='rgb8'), k=2)
                 )
             else:
                 rgb_imgs.append(
-                    convert_func(msgs[i * 2], desired_encoding='rgb8')
+                    convert_func(image_msgs[i], desired_encoding='rgb8')
                 )
-            cam_info_msgs.append(msgs[i * 2 + 1])
 
         # Get geofrontiers from navgraph_msg
         all_cam_data = []
@@ -516,7 +561,9 @@ class WildOS_Nav(TFLookupSubscriber):
         removed_uuids = self.remove_old_frontiers(navgraph_msg)
         updated_uuids = set()
         trav_class_idx = navgraph_msg.trav_classes.index(self.traversability_class)
-        scored_navgraph = navgraph_msg
+        # The latest graph is cached and may be scored more than once. Keep the
+        # cached input immutable so score properties do not accumulate each cycle.
+        scored_navgraph = deepcopy(navgraph_msg)
         
         for i in range(self.num_cameras):
             if not geofrontiers[i]:

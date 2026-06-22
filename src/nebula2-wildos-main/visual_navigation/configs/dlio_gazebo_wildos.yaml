@@ -53,7 +53,7 @@ object_mask_topic: /object_mask
 
 # ROS2 subscriber params
 qos_history_depth: 10
-syncsub_queue_size: 30
+syncsub_queue_size: 20
 syncsub_slop: 0.2
 
 # Object Search Config
