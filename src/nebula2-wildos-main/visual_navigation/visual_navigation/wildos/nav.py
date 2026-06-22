@@ -302,66 +302,25 @@ class WildOS_Nav(TFLookupSubscriber):
         img_msg_type = CompressedImage if self.using_compressed_imgs else ImageMsg
 
         self.camera_subs = {}
-        self.latest_camera_info = {}
-        self.latest_image_msgs = {}
-        self.latest_odom_msg = None
         for i in range(self.num_cameras):
-            self.create_subscription(
-                img_msg_type,
-                cameraimg_topic_str.format(CAMERA_MAPPING[i]),
-                lambda msg, cam_idx=i: self.image_callback(cam_idx, msg),
-                config.qos_history_depth,
-            )
-            self.create_subscription(
-                CameraInfo,
-                camerainfo_topic_str.format(CAMERA_MAPPING[i]),
-                lambda msg, cam_idx=i: self.camera_info_callback(cam_idx, msg),
-                config.qos_history_depth,
-            )
-        self.create_subscription(
-            Odometry,
-            config.odometry_topic,
-            self.odom_callback,
-            config.qos_history_depth,
+            self.camera_subs[i] = {
+                "image": Subscriber(self, img_msg_type, cameraimg_topic_str.format(CAMERA_MAPPING[i]), qos_profile=config.qos_history_depth),
+                "info": Subscriber(self, CameraInfo, camerainfo_topic_str.format(CAMERA_MAPPING[i]), qos_profile=config.qos_history_depth)
+            }
+        self.odom_sub = Subscriber(self, Odometry, config.odometry_topic, qos_profile=config.qos_history_depth)
+        self.navgraph_sub = Subscriber(self, NavigationGraph, config.navigation_graph_topic, qos_profile=config.qos_history_depth)
+
+        ts_subs = [self.odom_sub, self.navgraph_sub]
+        for i in range(self.num_cameras):
+            ts_subs.append(self.camera_subs[i]["image"])
+            ts_subs.append(self.camera_subs[i]["info"])
+
+        self.ts = ApproximateTimeSynchronizer(
+            ts_subs, queue_size=config.syncsub_queue_size, slop=config.syncsub_slop
         )
-        self.create_subscription(
-            NavigationGraph,
-            config.navigation_graph_topic,
-            self.navgraph_callback,
-            config.qos_history_depth,
-        )
-
-    def image_callback(self, cam_idx, msg):
-        self.latest_image_msgs[cam_idx] = msg
-
-    def camera_info_callback(self, cam_idx, msg):
-        self.latest_camera_info[cam_idx] = msg
-
-    def odom_callback(self, msg):
-        self.latest_odom_msg = msg
-
-    def navgraph_callback(self, navgraph_msg):
-        if self.latest_odom_msg is None:
-            self.get_logger().warn("Skipping WildOS callback until odometry is available.")
-            return
-
-        missing_images = [CAMERA_MAPPING[i] for i in range(self.num_cameras) if i not in self.latest_image_msgs]
-        if missing_images:
-            self.get_logger().warn(f"Skipping WildOS callback until images are available for: {missing_images}")
-            return
-
-        missing_info = [CAMERA_MAPPING[i] for i in range(self.num_cameras) if i not in self.latest_camera_info]
-        if missing_info:
-            self.get_logger().warn(f"Skipping WildOS callback until CameraInfo is available for: {missing_info}")
-            return
-
-        self.listener_callback(
-            self.latest_odom_msg,
-            navgraph_msg,
-            *[self.latest_image_msgs[i] for i in range(self.num_cameras)],
-        )
+        self.ts.registerCallback(self.listener_callback)
     
-    def listener_callback(self, odom_msg, navgraph_msg, *image_msgs):
+   def listener_callback(self, odom_msg, navgraph_msg, *msgs):
         self.clbk_cntr += 1
         self.get_logger().info(f"Received callback {self.clbk_cntr}")
 
@@ -374,24 +333,22 @@ class WildOS_Nav(TFLookupSubscriber):
             msg={
                 "odom": odom_msg,
                 "navgraph": navgraph_msg,
-                "image_msgs": image_msgs,
-                "camera_info_msgs": [self.latest_camera_info[i] for i in range(self.num_cameras)]
+                "cam_msgs": msgs
             },
             stamp=odom_msg.header.stamp,
         )
 
     def do_processing(self, msg, tf_data):
-        heavy_start = time.perf_counter()
-        self.get_logger().info("Started Heavy")
+        
+        print(f"Started Heavy")
 
         # Extract messages
         odom_msg = msg["odom"]
         navgraph_msg = msg["navgraph"]
-        image_msgs = msg["image_msgs"]
-        cam_info_msgs = msg["camera_info_msgs"]
+        msgs = msg["cam_msgs"]
 
         # Extract camera images and info
-        rgb_imgs = []
+        rgb_imgs, cam_info_msgs = [], []
         for i in range(self.num_cameras):
             if self.using_compressed_imgs:
                 convert_func = self.br.compressed_imgmsg_to_cv2
@@ -400,13 +357,13 @@ class WildOS_Nav(TFLookupSubscriber):
 
             if self.cam_inverted:
                 rgb_imgs.append(
-                    np.rot90(convert_func(image_msgs[i], desired_encoding='rgb8'), k=2)
+                    np.rot90(convert_func(msgs[i * 2], desired_encoding='rgb8'), k=2)
                 )
             else:
                 rgb_imgs.append(
-                    convert_func(image_msgs[i], desired_encoding='rgb8')
+                    convert_func(msgs[i * 2], desired_encoding='rgb8')
                 )
-        self.get_logger().info(f"Decoded {len(rgb_imgs)} camera images in {time.perf_counter() - heavy_start:.2f}s")
+            cam_info_msgs.append(msgs[i * 2 + 1])
 
         # Get geofrontiers from navgraph_msg
         all_cam_data = []
@@ -415,16 +372,10 @@ class WildOS_Nav(TFLookupSubscriber):
             all_cam_data.append(cam_data)
 
         try:
-            step_start = time.perf_counter()
             geofrontiers = self.geofrontier_to_image.extract_geofrontiers(
                 current_odom_msg=odom_msg,
                 navgraph=navgraph_msg,
                 all_cam_data=all_cam_data
-            )
-            geofrontier_items = geofrontiers.values() if hasattr(geofrontiers, "values") else geofrontiers
-            num_frontiers = sum(len(g.get("frontier_pixel_coords", [])) for g in geofrontier_items if g)
-            self.get_logger().info(
-                f"Extracted {num_frontiers} projected geofrontiers in {time.perf_counter() - step_start:.2f}s"
             )
         except Exception as e:
             self.get_logger().error(f"Error in extracting geofrontiers: {e}")
@@ -432,13 +383,9 @@ class WildOS_Nav(TFLookupSubscriber):
 
         
         # Model Forward pass
-        step_start = time.perf_counter()
         rgb_tensors = [self.transforms(img.copy()) for img in rgb_imgs]
         batch_tensor = torch.stack(rgb_tensors)
-        self.get_logger().info(f"Prepared model batch in {time.perf_counter() - step_start:.2f}s")
-        step_start = time.perf_counter()
         batch_img_traversability, batch_img_frontiers, spatial_feats = self.model.forward(batch_tensor)
-        self.get_logger().info(f"Finished model forward in {time.perf_counter() - step_start:.2f}s")
 
         batch_img_frontiers = batch_img_frontiers.cpu().numpy().astype(np.float32)
         batch_img_traversability = batch_img_traversability.cpu().numpy().astype(np.float32)

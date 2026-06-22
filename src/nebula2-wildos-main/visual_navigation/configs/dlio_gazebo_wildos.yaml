@@ -53,8 +53,8 @@ object_mask_topic: /object_mask
 
 # ROS2 subscriber params
 qos_history_depth: 10
-syncsub_queue_size: 600
-syncsub_slop: 6.0
+syncsub_queue_size: 30
+syncsub_slop: 0.2
 
 # Object Search Config
 object_search_config:
@@ -75,4 +75,4 @@ tf_lookup_config:
     wait_for_oldest: false
     clear_buffer_on_process: true
     spin_thread: true
-    use_latest_transform: true
+    use_latest_transform: false
