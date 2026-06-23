@@ -57,11 +57,11 @@ Visualization Manager:
             All Enabled: false
             base_link:
               Value: false
-            livox_frame:
-              Value: false
-            livox_imu_frame:
-              Value: false
+            imu_sensor_frame:
+              Value: true
             odom:
+              Value: true
+            pandar:
               Value: true
             wildos_front_camera_color_optical_frame:
               Value: false
@@ -83,9 +83,9 @@ Visualization Manager:
           Tree:
             odom:
               base_link:
-                livox_frame:
+                imu_sensor_frame:
                   {}
-                livox_imu_frame:
+                pandar:
                   {}
                 wildos_front_camera_link:
                   wildos_front_camera_color_optical_frame:
@@ -215,7 +215,7 @@ Visualization Manager:
           Use Fixed Frame: true
           Use rainbow: true
           Value: true
-      Enabled: true
+      Enabled: false
       Name: Point Clouds
     - Class: rviz_common/Group
       Displays:
@@ -315,7 +315,7 @@ Visualization Manager:
       Color: 200; 200; 200
       Color Layer: traversability
       Color Transformer: GridMapLayer
-      Enabled: false
+      Enabled: true
       Height Layer: elevation
       Height Transformer: GridMapLayer
       History Length: 1
@@ -334,12 +334,19 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /elevation_mapping_node/elevation_map_raw
       Use Rainbow: true
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: MarkerArray
       Namespaces:
-        {}
+        nav_graph/current_node: true
+        nav_graph/edges: true
+        nav_graph/explored_radius: true
+        nav_graph/free_radius: true
+        nav_graph/frontier_links: true
+        nav_graph/frontier_nodes: true
+        nav_graph/frontier_points: true
+        nav_graph/nodes: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -433,7 +440,7 @@ Visualization Manager:
         Value: /model_visualization
       Value: false
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
+      Enabled: true
       Name: MarkerArray
       Namespaces:
         {}
@@ -443,7 +450,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /score_rings
-      Value: false
+      Value: true
     - Alpha: 1
       Axes Length: 1
       Axes Radius: 0.10000000149011612
@@ -538,25 +545,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 2436.505859375
+      Distance: 157.30502319335938
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0
-        Y: 0
-        Z: 0
+        X: -12.355236053466797
+        Y: 22.47922706604004
+        Z: -7.370148181915283
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.1347962617874146
+      Pitch: 1.114796757698059
       Target Frame: base_link
       Value: Orbit (rviz_default_plugins)
-      Yaw: 2.954334259033203
+      Yaw: 0.8161397576332092
     Saved: ~
 Window Geometry:
   Displays:
