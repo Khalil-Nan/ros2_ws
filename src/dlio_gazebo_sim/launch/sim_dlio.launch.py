@@ -56,6 +56,15 @@ def generate_launch_description():
     go2_deskewed_lidar_frame = LaunchConfiguration('go2_deskewed_lidar_frame')
     go2_elevation_config = LaunchConfiguration('go2_elevation_config')
     go2_acceleration_scale = LaunchConfiguration('go2_acceleration_scale')
+    go2_camera_parent_frame = LaunchConfiguration('go2_camera_parent_frame')
+    go2_camera_frame = LaunchConfiguration('go2_camera_frame')
+    go2_camera_x = LaunchConfiguration('go2_camera_x')
+    go2_camera_y = LaunchConfiguration('go2_camera_y')
+    go2_camera_z = LaunchConfiguration('go2_camera_z')
+    go2_camera_qx = LaunchConfiguration('go2_camera_qx')
+    go2_camera_qy = LaunchConfiguration('go2_camera_qy')
+    go2_camera_qz = LaunchConfiguration('go2_camera_qz')
+    go2_camera_qw = LaunchConfiguration('go2_camera_qw')
     linear_x = LaunchConfiguration('linear_x')
     angular_z = LaunchConfiguration('angular_z')
     start_delay = LaunchConfiguration('start_delay')
@@ -72,6 +81,7 @@ def generate_launch_description():
     launch_goal_pose_bridge = LaunchConfiguration('launch_goal_pose_bridge')
     launch_nav2 = LaunchConfiguration('launch_nav2')
     wildos_config = LaunchConfiguration('wildos_config')
+    go2_wildos_config = LaunchConfiguration('go2_wildos_config')
     explorfm_probe_config = LaunchConfiguration('explorfm_probe_config')
     wildos_object_search = LaunchConfiguration('wildos_object_search')
     wildos_python = LaunchConfiguration('wildos_python')
@@ -584,6 +594,9 @@ def generate_launch_description():
             'base_link', 'wildos_front_camera_link',
         ],
         output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() != 'go2_rosbag'"
+        ])),
         additional_env={
             'PYTHONPATH': [wildos_source_path, ':', EnvironmentVariable('PYTHONPATH', default_value='')],
             'MPLCONFIGDIR': '/tmp/matplotlib',
@@ -600,6 +613,9 @@ def generate_launch_description():
             'wildos_front_camera_link', 'wildos_front_camera_color_optical_frame',
         ],
         output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() != 'go2_rosbag'"
+        ])),
         additional_env={
             'PYTHONPATH': [wildos_source_path, ':', EnvironmentVariable('PYTHONPATH', default_value='')],
             'MPLCONFIGDIR': '/tmp/matplotlib',
@@ -616,6 +632,9 @@ def generate_launch_description():
             'base_link', 'wildos_left_camera_link',
         ],
         output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() != 'go2_rosbag'"
+        ])),
     )
 
     wildos_left_camera_optical_tf = Node(
@@ -628,6 +647,9 @@ def generate_launch_description():
             'wildos_left_camera_link', 'wildos_left_camera_color_optical_frame',
         ],
         output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() != 'go2_rosbag'"
+        ])),
     )
 
     wildos_right_camera_link_tf = Node(
@@ -640,6 +662,9 @@ def generate_launch_description():
             'base_link', 'wildos_right_camera_link',
         ],
         output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() != 'go2_rosbag'"
+        ])),
     )
 
     wildos_right_camera_optical_tf = Node(
@@ -652,6 +677,25 @@ def generate_launch_description():
             'wildos_right_camera_link', 'wildos_right_camera_color_optical_frame',
         ],
         output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() != 'go2_rosbag'"
+        ])),
+    )
+
+    go2_wildos_camera_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='go2_wildos_camera_tf',
+        arguments=[
+            go2_camera_x, go2_camera_y, go2_camera_z,
+            go2_camera_qx, go2_camera_qy, go2_camera_qz, go2_camera_qw,
+            go2_camera_parent_frame, go2_camera_frame,
+        ],
+        output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() == 'go2_rosbag' and '",
+            launch_wildos, "'.lower() == 'true'"
+        ])),
     )
 
     wildos = ExecuteProcess(
@@ -666,7 +710,37 @@ def generate_launch_description():
         ],
         name='wildos',
         output='screen',
-        condition=IfCondition(launch_wildos),
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() != 'go2_rosbag' and '",
+            launch_wildos, "'.lower() == 'true'"
+        ])),
+        additional_env={
+            'PYTHONPATH': [wildos_source_path, ':', EnvironmentVariable('PYTHONPATH', default_value='')],
+            'MPLCONFIGDIR': '/tmp/matplotlib',
+            'PYTHONUNBUFFERED': '1',
+            'HF_HUB_DISABLE_XET': '1',
+            'HF_HUB_OFFLINE': '1',
+            'TRANSFORMERS_OFFLINE': '1',
+            'PYTORCH_CUDA_ALLOC_CONF': 'expandable_segments:True',
+        },
+    )
+
+    go2_wildos = ExecuteProcess(
+        cmd=[
+            wildos_python, '-m', 'visual_navigation.wildos.nav',
+            '--config', go2_wildos_config,
+            '--do_object_search', wildos_object_search,
+            '--ros-args',
+            '-r', '__node:=wildos',
+            '-p', 'use_sim_time:=true',
+            '--log-level', 'INFO',
+        ],
+        name='go2_wildos',
+        output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", data_source, "'.lower() == 'go2_rosbag' and '",
+            launch_wildos, "'.lower() == 'true'"
+        ])),
         additional_env={
             'PYTHONPATH': [wildos_source_path, ':', EnvironmentVariable('PYTHONPATH', default_value='')],
             'MPLCONFIGDIR': '/tmp/matplotlib',
@@ -923,6 +997,23 @@ def generate_launch_description():
             default_value='9.80665',
             description='Scale Livox accelerometer samples from g to m/s^2.',
         ),
+        DeclareLaunchArgument(
+            'go2_camera_parent_frame',
+            default_value='base_link',
+            description='Parent frame for the Go2 camera extrinsic used by WildOS.',
+        ),
+        DeclareLaunchArgument(
+            'go2_camera_frame',
+            default_value='camera_color_optical_frame',
+            description='Camera optical frame recorded in the Go2 image and CameraInfo headers.',
+        ),
+        DeclareLaunchArgument('go2_camera_x', default_value='0.36'),
+        DeclareLaunchArgument('go2_camera_y', default_value='0.0'),
+        DeclareLaunchArgument('go2_camera_z', default_value='0.24'),
+        DeclareLaunchArgument('go2_camera_qx', default_value='-0.5'),
+        DeclareLaunchArgument('go2_camera_qy', default_value='0.5'),
+        DeclareLaunchArgument('go2_camera_qz', default_value='-0.5'),
+        DeclareLaunchArgument('go2_camera_qw', default_value='0.5'),
         DeclareLaunchArgument('world', default_value='dlio_room.sdf'),
         DeclareLaunchArgument('linear_x', default_value='0.45'),
         DeclareLaunchArgument('angular_z', default_value='0.22'),
@@ -940,6 +1031,11 @@ def generate_launch_description():
         DeclareLaunchArgument('launch_goal_pose_bridge', default_value='false'),
         DeclareLaunchArgument('launch_nav2', default_value='false'),
         DeclareLaunchArgument('wildos_config', default_value='dlio_gazebo_wildos.yaml'),
+        DeclareLaunchArgument(
+            'go2_wildos_config',
+            default_value='dlio_go2_wildos_single_camera.yaml',
+            description='Single-camera WildOS config selected only for data_source:=go2_rosbag.',
+        ),
         DeclareLaunchArgument('explorfm_probe_config', default_value='dlio_gazebo_explorfm_probe.yaml'),
         DeclareLaunchArgument('wildos_object_search', default_value='false'),
         DeclareLaunchArgument('wildos_python', default_value='/root/wildos_venv/bin/python3'),
@@ -1058,7 +1154,9 @@ def generate_launch_description():
         wildos_left_camera_optical_tf,
         wildos_right_camera_link_tf,
         wildos_right_camera_optical_tf,
+        go2_wildos_camera_tf,
         wildos,
+        go2_wildos,
         explorfm_probe,
         obj_mask_triangulation,
         initial_goal_mux,
