@@ -622,6 +622,7 @@ class SparseGraphBuilderNode(RclpyNode):
         self.declare_parameter('edge_debug_marker_topic', 'graphnav_edge_debug_markers')
         self.declare_parameter('edge_debug_z_offset', 0.12)
         self.declare_parameter('edge_debug_max_segments_per_class', 20000)
+        self.declare_parameter('edge_debug_neighbor_explored_radius_factor', 2.0)
         self.declare_parameter('random_seed', 7)
         self.declare_parameter('min_x', -math.inf)
         self.declare_parameter('max_x', math.inf)
@@ -655,6 +656,10 @@ class SparseGraphBuilderNode(RclpyNode):
         self.edge_debug_max_segments = max(
             0,
             int(self.get_parameter('edge_debug_max_segments_per_class').value),
+        )
+        self.edge_debug_neighbor_radius_factor = max(
+            0.0,
+            float(self.get_parameter('edge_debug_neighbor_explored_radius_factor').value),
         )
         self.random = random.Random(int(self.get_parameter('random_seed').value))
         self.min_x = float(self.get_parameter('min_x').value)
@@ -816,6 +821,8 @@ class SparseGraphBuilderNode(RclpyNode):
     def append_edge_debug_points(self, category: str, from_idx: int, to_idx: int):
         if not self.publish_edge_debug:
             return
+        if not self.is_edge_debug_neighbor(from_idx, to_idx):
+            return
         points = self.edge_debug_points[category]
         if len(points) // 2 >= self.edge_debug_max_segments:
             return
@@ -827,6 +834,27 @@ class SparseGraphBuilderNode(RclpyNode):
             point.y = float(node_position.y)
             point.z = float(node_position.z) + self.edge_debug_z_offset
             points.append(point)
+
+    def is_edge_debug_neighbor(self, from_idx: int, to_idx: int) -> bool:
+        if from_idx >= len(self.nodes) or to_idx >= len(self.nodes) or from_idx == to_idx:
+            return False
+
+        radii = []
+        for node_idx in (from_idx, to_idx):
+            node = self.nodes[node_idx]
+            radius = node.explored_radius
+            if not math.isfinite(radius) or radius <= 0.0:
+                radius = node.free_radius
+            if not math.isfinite(radius) or radius <= 0.0:
+                return False
+            radii.append(radius)
+
+        neighbor_radius = self.edge_debug_neighbor_radius_factor * min(radii)
+        distance = self.distance_xy(
+            self.pose_xy(self.nodes[from_idx].pose),
+            self.pose_xy(self.nodes[to_idx].pose),
+        )
+        return distance <= min(self.edge_radius, neighbor_radius)
 
     def publish_edge_debug_markers(self, frame_id: str, stamp):
         if not self.publish_edge_debug:

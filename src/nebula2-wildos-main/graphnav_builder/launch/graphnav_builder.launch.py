@@ -39,6 +39,7 @@ def generate_launch_description():
                 'edge_debug_marker_topic': 'graphnav_edge_debug_markers',
                 'edge_debug_z_offset': 0.12,
                 'edge_debug_max_segments_per_class': 20000,
+                'edge_debug_neighbor_explored_radius_factor': 2.0,
                 'random_seed': 7,
             }],
         ),

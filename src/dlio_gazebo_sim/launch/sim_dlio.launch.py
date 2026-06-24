@@ -126,6 +126,9 @@ def generate_launch_description():
     graphnav_update_free_radius_fraction = LaunchConfiguration('graphnav_update_free_radius_fraction')
     graphnav_publish_edge_debug_markers = LaunchConfiguration('graphnav_publish_edge_debug_markers')
     graphnav_edge_debug_marker_topic = LaunchConfiguration('graphnav_edge_debug_marker_topic')
+    graphnav_edge_debug_neighbor_radius_factor = LaunchConfiguration(
+        'graphnav_edge_debug_neighbor_explored_radius_factor'
+    )
     graphnav_frontier_association_radius = LaunchConfiguration('graphnav_frontier_association_radius')
     graphnav_publish_global_memory_markers = LaunchConfiguration('graphnav_publish_global_memory_markers')
     graphnav_global_memory_marker_topic = LaunchConfiguration('graphnav_global_memory_marker_topic')
@@ -507,6 +510,7 @@ def generate_launch_description():
             'edge_debug_marker_topic': graphnav_edge_debug_marker_topic,
             'edge_debug_z_offset': 0.12,
             'edge_debug_max_segments_per_class': 20000,
+            'edge_debug_neighbor_explored_radius_factor': graphnav_edge_debug_neighbor_radius_factor,
             'publish_global_memory_markers': graphnav_publish_global_memory_markers,
             'global_memory_marker_topic': graphnav_global_memory_marker_topic,
             'global_memory_marker_stride': graphnav_global_memory_marker_stride,
@@ -1003,6 +1007,10 @@ def generate_launch_description():
         DeclareLaunchArgument('graphnav_update_free_radius_fraction', default_value='0.8'),
         DeclareLaunchArgument('graphnav_publish_edge_debug_markers', default_value='true'),
         DeclareLaunchArgument('graphnav_edge_debug_marker_topic', default_value='/graphnav_edge_debug_markers'),
+        DeclareLaunchArgument(
+            'graphnav_edge_debug_neighbor_explored_radius_factor',
+            default_value='2.0',
+        ),
         DeclareLaunchArgument('graphnav_frontier_association_radius', default_value='1.5'),
         DeclareLaunchArgument('graphnav_publish_global_memory_markers', default_value='true'),
         DeclareLaunchArgument('graphnav_global_memory_marker_topic', default_value='/global_traversability_markers'),
