@@ -119,10 +119,13 @@ def generate_launch_description():
     graphnav_odom_topic = LaunchConfiguration('graphnav_odom_topic')
     graphnav_topic = LaunchConfiguration('graphnav_topic')
     graphnav_safe_threshold = LaunchConfiguration('graphnav_safe_threshold')
+    graphnav_planning_radius = LaunchConfiguration('graphnav_planning_radius')
     graphnav_edge_radius = LaunchConfiguration('graphnav_edge_radius')
     graphnav_num_samples = LaunchConfiguration('graphnav_num_samples')
     graphnav_update_min_travel = LaunchConfiguration('graphnav_update_min_travel')
     graphnav_update_free_radius_fraction = LaunchConfiguration('graphnav_update_free_radius_fraction')
+    graphnav_publish_edge_debug_markers = LaunchConfiguration('graphnav_publish_edge_debug_markers')
+    graphnav_edge_debug_marker_topic = LaunchConfiguration('graphnav_edge_debug_marker_topic')
     graphnav_frontier_association_radius = LaunchConfiguration('graphnav_frontier_association_radius')
     graphnav_publish_global_memory_markers = LaunchConfiguration('graphnav_publish_global_memory_markers')
     graphnav_global_memory_marker_topic = LaunchConfiguration('graphnav_global_memory_marker_topic')
@@ -491,6 +494,7 @@ def generate_launch_description():
             'observed_layer': 'elevation',
             'trav_class': 'elevation_traversability',
             'safe_threshold': graphnav_safe_threshold,
+            'planning_radius': graphnav_planning_radius,
             'local_map_resolution': 0.1,
             'max_free_radius': 4.0,
             'traversable_radius': 0.5,
@@ -499,6 +503,10 @@ def generate_launch_description():
             'num_samples': graphnav_num_samples,
             'graph_update_min_travel': graphnav_update_min_travel,
             'graph_update_free_radius_fraction': graphnav_update_free_radius_fraction,
+            'publish_edge_debug_markers': graphnav_publish_edge_debug_markers,
+            'edge_debug_marker_topic': graphnav_edge_debug_marker_topic,
+            'edge_debug_z_offset': 0.12,
+            'edge_debug_max_segments_per_class': 20000,
             'publish_global_memory_markers': graphnav_publish_global_memory_markers,
             'global_memory_marker_topic': graphnav_global_memory_marker_topic,
             'global_memory_marker_stride': graphnav_global_memory_marker_stride,
@@ -988,10 +996,13 @@ def generate_launch_description():
         DeclareLaunchArgument('graphnav_odom_topic', default_value='/dlio/odom_node/odom'),
         DeclareLaunchArgument('graphnav_topic', default_value='/nav_graph'),
         DeclareLaunchArgument('graphnav_safe_threshold', default_value='0.2'),
+        DeclareLaunchArgument('graphnav_planning_radius', default_value='10.0'),
         DeclareLaunchArgument('graphnav_edge_radius', default_value='8.0'),
         DeclareLaunchArgument('graphnav_num_samples', default_value='1000'),
         DeclareLaunchArgument('graphnav_update_min_travel', default_value='0.75'),
         DeclareLaunchArgument('graphnav_update_free_radius_fraction', default_value='0.8'),
+        DeclareLaunchArgument('graphnav_publish_edge_debug_markers', default_value='true'),
+        DeclareLaunchArgument('graphnav_edge_debug_marker_topic', default_value='/graphnav_edge_debug_markers'),
         DeclareLaunchArgument('graphnav_frontier_association_radius', default_value='1.5'),
         DeclareLaunchArgument('graphnav_publish_global_memory_markers', default_value='true'),
         DeclareLaunchArgument('graphnav_global_memory_marker_topic', default_value='/global_traversability_markers'),

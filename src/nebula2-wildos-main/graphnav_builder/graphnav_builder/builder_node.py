@@ -201,6 +201,34 @@ class TraversabilityGrid:
     def is_known(self, cell: Cell) -> bool:
         return self.in_bounds_cell(cell) and self.state_at_cell(cell) in (self.FREE, self.OBSTACLE)
 
+    def mask_outside_circle(self, center_xy: XY, radius: float):
+        """Treat cells outside the local planning circle as unknown."""
+        if not math.isfinite(radius) or radius <= 0.0:
+            return
+
+        radius_sq = radius * radius
+        for row in range(self.height):
+            for col in range(self.width):
+                cell = (row, col)
+                x, y = self.cell_to_xy(cell)
+                if (x - center_xy[0]) ** 2 + (y - center_xy[1]) ** 2 > radius_sq:
+                    self.state[self.flat_index(cell)] = self.UNKNOWN
+
+        self.free_cells = []
+        self.unknown_cells = []
+        self.obstacle_cells = []
+        for row in range(self.height):
+            for col in range(self.width):
+                cell = (row, col)
+                state = self.state_at_cell(cell)
+                if state == self.FREE:
+                    self.free_cells.append(cell)
+                elif state == self.OBSTACLE:
+                    self.obstacle_cells.append(cell)
+                else:
+                    self.unknown_cells.append(cell)
+        self.exterior_unknown_cells = self.find_exterior_unknown_cells()
+
     def boundary_between_free_and_unknown(self, free_cells: Optional[Sequence[Cell]] = None) -> List[Cell]:
         exterior_unknown = {self.flat_index(cell) for cell in self.exterior_unknown_cells}
         frontiers = []
@@ -347,17 +375,47 @@ class TraversabilityGrid:
         sdf_obstacle: Sequence[float],
         clearance: float,
     ) -> bool:
+        valid, _, _ = self.evaluate_clearance_line(
+            start,
+            end,
+            sdf_unknown,
+            sdf_obstacle,
+            clearance,
+        )
+        return valid
+
+    def evaluate_clearance_line(
+        self,
+        start: XY,
+        end: XY,
+        sdf_unknown: Sequence[float],
+        sdf_obstacle: Sequence[float],
+        clearance: float,
+    ) -> Tuple[bool, bool, bool]:
+        """Return (valid, too_close_unknown, too_close_obstacle)."""
         cells = self.line_cells(start, end)
         if cells is None:
-            return False
+            return False, False, False
 
+        too_close_unknown = False
+        too_close_obstacle = False
         for cell in cells:
-            if not self.is_free(cell):
-                return False
+            state = self.state_at_cell(cell)
+            if state == self.UNKNOWN:
+                too_close_unknown = True
+                continue
+            if state == self.OBSTACLE:
+                too_close_obstacle = True
+                continue
+
             idx = self.flat_index(cell)
-            if self.clearance_from_fields(idx, sdf_unknown, sdf_obstacle) <= clearance:
-                return False
-        return True
+            if self.distance_to_cell_boundary(sdf_unknown[idx]) <= clearance:
+                too_close_unknown = True
+            if self.distance_to_cell_boundary(sdf_obstacle[idx]) <= clearance:
+                too_close_obstacle = True
+
+        valid = not too_close_unknown and not too_close_obstacle
+        return valid, too_close_unknown, too_close_obstacle
 
     def contradicted_by_obstacle(
         self,
@@ -546,6 +604,7 @@ class SparseGraphBuilderNode(RclpyNode):
         self.declare_parameter('observed_layer', '')
         self.declare_parameter('trav_class', 'default')
         self.declare_parameter('safe_threshold', 0.5)
+        self.declare_parameter('planning_radius', 10.0)
         self.declare_parameter('local_map_resolution', 0.1)
         self.declare_parameter('max_free_radius', 4.0)
         self.declare_parameter('traversable_radius', 0.5)
@@ -559,6 +618,10 @@ class SparseGraphBuilderNode(RclpyNode):
         self.declare_parameter('global_memory_marker_stride', 2)
         self.declare_parameter('publish_global_memory_grid', True)
         self.declare_parameter('global_memory_grid_topic', 'global_traversability_grid')
+        self.declare_parameter('publish_edge_debug_markers', True)
+        self.declare_parameter('edge_debug_marker_topic', 'graphnav_edge_debug_markers')
+        self.declare_parameter('edge_debug_z_offset', 0.12)
+        self.declare_parameter('edge_debug_max_segments_per_class', 20000)
         self.declare_parameter('random_seed', 7)
         self.declare_parameter('min_x', -math.inf)
         self.declare_parameter('max_x', math.inf)
@@ -572,6 +635,7 @@ class SparseGraphBuilderNode(RclpyNode):
         self.observed_layer = self.get_parameter('observed_layer').value
         self.trav_class = self.get_parameter('trav_class').value
         self.safe_threshold = float(self.get_parameter('safe_threshold').value)
+        self.planning_radius = float(self.get_parameter('planning_radius').value)
         self.local_map_resolution = float(self.get_parameter('local_map_resolution').value)
         self.max_free_radius = float(self.get_parameter('max_free_radius').value)
         self.traversable_radius = float(self.get_parameter('traversable_radius').value)
@@ -585,6 +649,13 @@ class SparseGraphBuilderNode(RclpyNode):
         self.global_memory_marker_stride = max(1, int(self.get_parameter('global_memory_marker_stride').value))
         self.publish_global_memory_grid_debug = bool(self.get_parameter('publish_global_memory_grid').value)
         self.global_memory_grid_topic = self.get_parameter('global_memory_grid_topic').value
+        self.publish_edge_debug = bool(self.get_parameter('publish_edge_debug_markers').value)
+        self.edge_debug_marker_topic = self.get_parameter('edge_debug_marker_topic').value
+        self.edge_debug_z_offset = float(self.get_parameter('edge_debug_z_offset').value)
+        self.edge_debug_max_segments = max(
+            0,
+            int(self.get_parameter('edge_debug_max_segments_per_class').value),
+        )
         self.random = random.Random(int(self.get_parameter('random_seed').value))
         self.min_x = float(self.get_parameter('min_x').value)
         self.max_x = float(self.get_parameter('max_x').value)
@@ -598,10 +669,16 @@ class SparseGraphBuilderNode(RclpyNode):
         self.last_graph_update_pose: Optional[XY] = None
         self.last_graph_update_node_uuid: Optional[Tuple[int, ...]] = None
         self.global_memory = GlobalTraversabilityMemory(self.local_map_resolution)
+        self.edge_debug_points: Dict[str, List[Point]] = {
+            'valid': [],
+            'too_close_unknown': [],
+            'too_close_obstacle': [],
+        }
 
         self.graph_pub = self.create_publisher(NavigationGraph, self.nav_graph_topic, 10)
         self.global_memory_marker_pub = self.create_publisher(MarkerArray, self.global_memory_marker_topic, 1)
         self.global_memory_grid_pub = self.create_publisher(GridMap, self.global_memory_grid_topic, 1)
+        self.edge_debug_marker_pub = self.create_publisher(MarkerArray, self.edge_debug_marker_topic, 1)
         self.odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, 20)
         self.grid_sub = self.create_subscription(GridMap, self.grid_map_topic, self.grid_map_callback, 10)
 
@@ -616,6 +693,13 @@ class SparseGraphBuilderNode(RclpyNode):
             self.get_logger().warn(str(exc))
             return
 
+        robot_xy = self.pose_xy(self.latest_odom.pose.pose) if self.latest_odom is not None else None
+        # The rolling GridMap center is already tied to the robot pose at the
+        # map timestamp, so it is a better synchronized circle center than the
+        # asynchronously received latest odometry sample.
+        planning_center = (grid.center_x, grid.center_y)
+        grid.mask_outside_circle(planning_center, self.planning_radius)
+
         if not grid.free_cells and not grid.obstacle_cells:
             self.get_logger().warn('No observed cells in traversability grid; skipping graph update')
             return
@@ -625,13 +709,13 @@ class SparseGraphBuilderNode(RclpyNode):
 
         sdf_unknown = grid.distance_field(grid.unknown_cells)
         sdf_obstacle = grid.distance_field(grid.obstacle_cells)
-        robot_xy = self.pose_xy(self.latest_odom.pose.pose) if self.latest_odom is not None else None
         reachable_free_cells = grid.reachable_free_cells(robot_xy)
 
         if self.should_update_navigation_graph():
             self.update_navigation_graph(grid, sdf_unknown, sdf_obstacle, reachable_free_cells)
             self.update_current_node()
             self.remember_graph_update()
+            self.publish_edge_debug_markers(msg.header.frame_id, msg.header.stamp)
 
         if global_grid is not None and global_grid.free_cells:
             self.publish_global_memory_grid(global_grid, msg.header.frame_id, msg.header.stamp)
@@ -728,6 +812,71 @@ class SparseGraphBuilderNode(RclpyNode):
             self.points_marker(frame_id, stamp, 'global_traversability/obstacle', 2, obstacle_points, scale, 1.0, 0.0, 0.0, 0.75)
         )
         self.global_memory_marker_pub.publish(markers)
+
+    def append_edge_debug_points(self, category: str, from_idx: int, to_idx: int):
+        if not self.publish_edge_debug:
+            return
+        points = self.edge_debug_points[category]
+        if len(points) // 2 >= self.edge_debug_max_segments:
+            return
+
+        for node_idx in (from_idx, to_idx):
+            node_position = self.nodes[node_idx].pose.position
+            point = Point()
+            point.x = float(node_position.x)
+            point.y = float(node_position.y)
+            point.z = float(node_position.z) + self.edge_debug_z_offset
+            points.append(point)
+
+    def publish_edge_debug_markers(self, frame_id: str, stamp):
+        if not self.publish_edge_debug:
+            return
+
+        markers = MarkerArray()
+        markers.markers.append(self.delete_marker(frame_id, stamp, 'graphnav_edge_debug'))
+        markers.markers.append(
+            self.line_marker(
+                frame_id,
+                stamp,
+                'graphnav_edge_debug/valid',
+                1,
+                self.edge_debug_points['valid'],
+                0.025,
+                0.0,
+                0.9,
+                0.1,
+                0.85,
+            )
+        )
+        markers.markers.append(
+            self.line_marker(
+                frame_id,
+                stamp,
+                'graphnav_edge_debug/too_close_unknown',
+                2,
+                self.edge_debug_points['too_close_unknown'],
+                0.035,
+                1.0,
+                0.85,
+                0.0,
+                0.85,
+            )
+        )
+        markers.markers.append(
+            self.line_marker(
+                frame_id,
+                stamp,
+                'graphnav_edge_debug/too_close_obstacle',
+                3,
+                self.edge_debug_points['too_close_obstacle'],
+                0.04,
+                1.0,
+                0.0,
+                0.0,
+                0.9,
+            )
+        )
+        self.edge_debug_marker_pub.publish(markers)
 
     def update_current_node(self):
         if self.latest_odom is None or not self.nodes:
@@ -913,11 +1062,36 @@ class SparseGraphBuilderNode(RclpyNode):
 
     def build_edges(self, grid: TraversabilityGrid, sdf_unknown: List[float], sdf_obstacle: List[float]):
         # Algorithm 5: Build Edges. Paper default: r_edge=8m.
+        self.edge_debug_points = {
+            'valid': [],
+            'too_close_unknown': [],
+            'too_close_obstacle': [],
+        }
+
         for i, node_i in enumerate(self.nodes):
             xy_i = self.pose_xy(node_i.pose)
             for j in range(i + 1, len(self.nodes)):
-                if self.edge_is_valid(grid, sdf_unknown, sdf_obstacle, i, j, start_xy=xy_i):
+                edge = (i, j)
+                if edge in self.edges:
+                    self.append_edge_debug_points('valid', i, j)
+                    continue
+
+                valid, too_close_unknown, too_close_obstacle = self.evaluate_edge(
+                    grid,
+                    sdf_unknown,
+                    sdf_obstacle,
+                    i,
+                    j,
+                    start_xy=xy_i,
+                )
+                if valid:
                     self.edges.add((i, j))
+                    self.append_edge_debug_points('valid', i, j)
+                else:
+                    if too_close_unknown:
+                        self.append_edge_debug_points('too_close_unknown', i, j)
+                    if too_close_obstacle:
+                        self.append_edge_debug_points('too_close_obstacle', i, j)
 
     def edge_is_valid(
         self,
@@ -928,14 +1102,39 @@ class SparseGraphBuilderNode(RclpyNode):
         to_idx: int,
         start_xy: Optional[XY] = None,
     ) -> bool:
+        valid, _, _ = self.evaluate_edge(
+            grid,
+            sdf_unknown,
+            sdf_obstacle,
+            from_idx,
+            to_idx,
+            start_xy,
+        )
+        return valid
+
+    def evaluate_edge(
+        self,
+        grid: TraversabilityGrid,
+        sdf_unknown: List[float],
+        sdf_obstacle: List[float],
+        from_idx: int,
+        to_idx: int,
+        start_xy: Optional[XY] = None,
+    ) -> Tuple[bool, bool, bool]:
         if from_idx >= len(self.nodes) or to_idx >= len(self.nodes) or from_idx == to_idx:
-            return False
+            return False, False, False
 
         xy_i = start_xy if start_xy is not None else self.pose_xy(self.nodes[from_idx].pose)
         xy_j = self.pose_xy(self.nodes[to_idx].pose)
         if self.distance_xy(xy_i, xy_j) > self.edge_radius:
-            return False
-        return grid.clearance_collision_free(xy_i, xy_j, sdf_unknown, sdf_obstacle, self.traversable_radius)
+            return False, False, False
+        return grid.evaluate_clearance_line(
+            xy_i,
+            xy_j,
+            sdf_unknown,
+            sdf_obstacle,
+            self.traversable_radius,
+        )
 
     def existing_edge_is_valid(
         self,
@@ -1010,6 +1209,36 @@ class SparseGraphBuilderNode(RclpyNode):
         marker.scale.x = float(scale)
         marker.scale.y = float(scale)
         marker.scale.z = 0.025
+        marker.color.r = float(r)
+        marker.color.g = float(g)
+        marker.color.b = float(b)
+        marker.color.a = float(a)
+        marker.points = points
+        return marker
+
+    @staticmethod
+    def line_marker(
+        frame_id: str,
+        stamp,
+        ns: str,
+        marker_id: int,
+        points: List[Point],
+        width: float,
+        r: float,
+        g: float,
+        b: float,
+        a: float,
+    ) -> Marker:
+        marker = Marker()
+        marker.header.frame_id = frame_id
+        marker.header.stamp = stamp
+        marker.ns = ns
+        marker.id = marker_id
+        marker.type = Marker.LINE_LIST
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.frame_locked = True
+        marker.scale.x = float(width)
         marker.color.r = float(r)
         marker.color.g = float(g)
         marker.color.b = float(b)

@@ -83,7 +83,7 @@ class NavGraphMarkerNode(Node):
                 continue
             edge_points.append(point_from_pose(msg.nodes[edge.from_idx].pose, self.z_offset))
             edge_points.append(point_from_pose(msg.nodes[edge.to_idx].pose, self.z_offset))
-        markers.markers.append(self.line_marker(msg, 'nav_graph', 5, 'edges', edge_points, 0.018, color(1.0, 0.8, 0.0)))
+        markers.markers.append(self.line_marker(msg, 'nav_graph', 5, 'edges', edge_points, 0.018, color(0.0, 0.9, 0.1)))
 
         current_node_points = []
         if msg.nodes and msg.current_node_idx < len(msg.nodes):
