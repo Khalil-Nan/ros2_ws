@@ -19,6 +19,14 @@ def generate_launch_description():
     params_file = LaunchConfiguration('params_file')
     use_respawn = LaunchConfiguration('use_respawn')
     log_level = LaunchConfiguration('log_level')
+    launch_collision_monitor = LaunchConfiguration('launch_collision_monitor')
+    collision_monitor_pointcloud_topic = LaunchConfiguration('collision_monitor_pointcloud_topic')
+
+    velocity_smoother_output_topic = PythonExpression([
+        "'cmd_vel_smoothed' if '",
+        launch_collision_monitor,
+        "'.lower() == 'true' else 'cmd_vel'",
+    ])
 
     lifecycle_nodes = [
         'controller_server',
@@ -110,8 +118,22 @@ def generate_launch_description():
                 arguments=['--ros-args', '--log-level', log_level],
                 remappings=remappings + [
                     ('cmd_vel', 'cmd_vel_nav'),
-                    ('cmd_vel_smoothed', 'cmd_vel'),
+                    ('cmd_vel_smoothed', velocity_smoother_output_topic),
                 ],
+            ),
+            Node(
+                package='nav2_collision_monitor',
+                executable='collision_monitor',
+                name='collision_monitor',
+                output='screen',
+                respawn=use_respawn,
+                respawn_delay=2.0,
+                parameters=[configured_params],
+                arguments=['--ros-args', '--log-level', log_level],
+                remappings=remappings + [
+                    ('/points_raw', collision_monitor_pointcloud_topic),
+                ],
+                condition=IfCondition(launch_collision_monitor),
             ),
             Node(
                 package='nav2_lifecycle_manager',
@@ -120,6 +142,18 @@ def generate_launch_description():
                 output='screen',
                 arguments=['--ros-args', '--log-level', log_level],
                 parameters=[{'autostart': autostart}, {'node_names': lifecycle_nodes}],
+            ),
+            Node(
+                package='nav2_lifecycle_manager',
+                executable='lifecycle_manager',
+                name='lifecycle_manager_collision_monitor',
+                output='screen',
+                arguments=['--ros-args', '--log-level', log_level],
+                parameters=[
+                    {'autostart': autostart},
+                    {'node_names': ['collision_monitor']},
+                ],
+                condition=IfCondition(launch_collision_monitor),
             ),
         ],
     )
@@ -160,6 +194,20 @@ def generate_launch_description():
             'use_respawn',
             default_value='False',
             description='Whether to respawn Nav2 nodes if they crash.',
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            'launch_collision_monitor',
+            default_value='false',
+            description='Route smoothed velocity commands through the Nav2 Collision Monitor.',
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            'collision_monitor_pointcloud_topic',
+            default_value='/points_raw',
+            description='PointCloud2 topic used by the Collision Monitor stop zone.',
         )
     )
     ld.add_action(DeclareLaunchArgument('log_level', default_value='info', description='Log level'))

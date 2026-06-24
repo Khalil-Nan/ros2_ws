@@ -80,6 +80,7 @@ def generate_launch_description():
     launch_static_path = LaunchConfiguration('launch_static_path')
     launch_goal_pose_bridge = LaunchConfiguration('launch_goal_pose_bridge')
     launch_nav2 = LaunchConfiguration('launch_nav2')
+    launch_collision_monitor = LaunchConfiguration('launch_collision_monitor')
     wildos_config = LaunchConfiguration('wildos_config')
     go2_wildos_config = LaunchConfiguration('go2_wildos_config')
     explorfm_probe_config = LaunchConfiguration('explorfm_probe_config')
@@ -903,6 +904,8 @@ def generate_launch_description():
             'use_sim_time': 'true',
             'autostart': nav2_autostart,
             'params_file': nav2_params_file,
+            'launch_collision_monitor': launch_collision_monitor,
+            'collision_monitor_pointcloud_topic': pointcloud_topic,
         }.items(),
         condition=IfCondition(launch_nav2),
     )
@@ -1030,6 +1033,11 @@ def generate_launch_description():
         DeclareLaunchArgument('launch_static_path', default_value='false'),
         DeclareLaunchArgument('launch_goal_pose_bridge', default_value='false'),
         DeclareLaunchArgument('launch_nav2', default_value='false'),
+        DeclareLaunchArgument(
+            'launch_collision_monitor',
+            default_value='false',
+            description='Route Nav2 velocity commands through a Livox PointCloud2 emergency stop zone.',
+        ),
         DeclareLaunchArgument('wildos_config', default_value='dlio_gazebo_wildos.yaml'),
         DeclareLaunchArgument(
             'go2_wildos_config',
