@@ -29,6 +29,7 @@
   <exec_depend>nav2_planner</exec_depend>
   <exec_depend>nav2_smoother</exec_depend>
   <exec_depend>nav2_velocity_smoother</exec_depend>
+  <exec_depend>pcl_ros</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>ros_gz_bridge</exec_depend>
   <exec_depend>ros_gz_sim</exec_depend>

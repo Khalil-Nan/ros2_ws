@@ -212,6 +212,19 @@ velocity_smoother:
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0
 
+collision_pointcloud_self_filter:
+  ros__parameters:
+    use_sim_time: true
+    input_frame: base_link
+    output_frame: base_link
+    min_x: -0.45
+    max_x: 0.45
+    min_y: -0.32
+    max_y: 0.32
+    min_z: -0.25
+    max_z: 0.45
+    negative: true
+
 collision_monitor:
   ros__parameters:
     use_sim_time: true
@@ -222,7 +235,7 @@ collision_monitor:
     cmd_vel_out_topic: cmd_vel
     state_topic: collision_monitor_state
     transform_tolerance: 0.2
-    source_timeout: 0.3
+    source_timeout: 1.0
     base_shift_correction: false
     stop_pub_timeout: 2.0
     polygons: ["robot_stop"]
@@ -236,12 +249,12 @@ collision_monitor:
     observation_sources: ["pointcloud"]
     pointcloud:
       type: pointcloud
-      topic: /points_raw
+      topic: /points_collision_filtered
       transport_type: raw
       min_height: 0.10
       max_height: 0.65
       min_range: 0.25
-      source_timeout: 0.3
+      source_timeout: 1.0
       enabled: true
 
 docking_server:

@@ -122,6 +122,21 @@ def generate_launch_description():
                 ],
             ),
             Node(
+                package='pcl_ros',
+                executable='filter_crop_box_node',
+                name='collision_pointcloud_self_filter',
+                output='screen',
+                respawn=use_respawn,
+                respawn_delay=2.0,
+                parameters=[configured_params],
+                arguments=['--ros-args', '--log-level', log_level],
+                remappings=remappings + [
+                    ('input', collision_monitor_pointcloud_topic),
+                    ('output', '/points_collision_filtered'),
+                ],
+                condition=IfCondition(launch_collision_monitor),
+            ),
+            Node(
                 package='nav2_collision_monitor',
                 executable='collision_monitor',
                 name='collision_monitor',
@@ -130,9 +145,7 @@ def generate_launch_description():
                 respawn_delay=2.0,
                 parameters=[configured_params],
                 arguments=['--ros-args', '--log-level', log_level],
-                remappings=remappings + [
-                    ('/points_raw', collision_monitor_pointcloud_topic),
-                ],
+                remappings=remappings,
                 condition=IfCondition(launch_collision_monitor),
             ),
             Node(
