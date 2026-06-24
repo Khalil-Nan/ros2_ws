@@ -120,6 +120,7 @@ def generate_launch_description():
     graphnav_topic = LaunchConfiguration('graphnav_topic')
     graphnav_safe_threshold = LaunchConfiguration('graphnav_safe_threshold')
     graphnav_planning_radius = LaunchConfiguration('graphnav_planning_radius')
+    graphnav_traversable_radius = LaunchConfiguration('graphnav_traversable_radius')
     graphnav_edge_radius = LaunchConfiguration('graphnav_edge_radius')
     graphnav_num_samples = LaunchConfiguration('graphnav_num_samples')
     graphnav_update_min_travel = LaunchConfiguration('graphnav_update_min_travel')
@@ -500,7 +501,7 @@ def generate_launch_description():
             'planning_radius': graphnav_planning_radius,
             'local_map_resolution': 0.1,
             'max_free_radius': 4.0,
-            'traversable_radius': 0.5,
+            'traversable_radius': graphnav_traversable_radius,
             'frontier_association_radius': graphnav_frontier_association_radius,
             'edge_radius': graphnav_edge_radius,
             'num_samples': graphnav_num_samples,
@@ -1001,6 +1002,7 @@ def generate_launch_description():
         DeclareLaunchArgument('graphnav_topic', default_value='/nav_graph'),
         DeclareLaunchArgument('graphnav_safe_threshold', default_value='0.2'),
         DeclareLaunchArgument('graphnav_planning_radius', default_value='10.0'),
+        DeclareLaunchArgument('graphnav_traversable_radius', default_value='0.4'),
         DeclareLaunchArgument('graphnav_edge_radius', default_value='8.0'),
         DeclareLaunchArgument('graphnav_num_samples', default_value='1000'),
         DeclareLaunchArgument('graphnav_update_min_travel', default_value='0.75'),

@@ -30,7 +30,7 @@ def generate_launch_description():
                 'planning_radius': 10.0,
                 'local_map_resolution': 0.1,
                 'max_free_radius': 4.0,
-                'traversable_radius': 0.5,
+                'traversable_radius': 0.4,
                 'edge_radius': 8.0,
                 'num_samples': 1000,
                 'graph_update_min_travel': 0.75,

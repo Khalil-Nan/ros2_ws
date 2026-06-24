@@ -607,7 +607,7 @@ class SparseGraphBuilderNode(RclpyNode):
         self.declare_parameter('planning_radius', 10.0)
         self.declare_parameter('local_map_resolution', 0.1)
         self.declare_parameter('max_free_radius', 4.0)
-        self.declare_parameter('traversable_radius', 0.5)
+        self.declare_parameter('traversable_radius', 0.4)
         self.declare_parameter('frontier_association_radius', 1.5)
         self.declare_parameter('edge_radius', 8.0)
         self.declare_parameter('num_samples', 1000)
@@ -1005,7 +1005,7 @@ class SparseGraphBuilderNode(RclpyNode):
         num_samples: int,
     ):
         # Algorithm 3: Sample New Nodes.
-        # Paper defaults: r_max=10m, r_max^f=4m, N_samples=1000, r_trav=0.5m.
+        # Paper uses r_trav=0.5m; this deployment defaults to 0.4m for the smaller Go2 platform.
         if not reachable_free_cells:
             return
 
