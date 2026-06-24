@@ -787,7 +787,6 @@ class SparseGraphBuilderNode(RclpyNode):
         self.update_nodes(grid, sdf_unknown, sdf_obstacle)
         self.sample_new_nodes(grid, sdf_unknown, sdf_obstacle, reachable_free_cells, self.num_samples)
         self.update_frontier_nodes(grid, reachable_free_cells)
-        self.prune_invalid_edges(grid, sdf_unknown, sdf_obstacle)
         self.build_edges(grid, sdf_unknown, sdf_obstacle)
 
     def update_nodes(self, grid: TraversabilityGrid, sdf_unknown: List[float], sdf_obstacle: List[float]):
