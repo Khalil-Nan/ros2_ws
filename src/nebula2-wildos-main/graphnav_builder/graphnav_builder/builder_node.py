@@ -546,7 +546,6 @@ class SparseGraphBuilderNode(RclpyNode):
         self.declare_parameter('observed_layer', '')
         self.declare_parameter('trav_class', 'default')
         self.declare_parameter('safe_threshold', 0.5)
-        self.declare_parameter('local_map_radius', 10.0)
         self.declare_parameter('local_map_resolution', 0.1)
         self.declare_parameter('max_free_radius', 4.0)
         self.declare_parameter('traversable_radius', 0.5)
@@ -573,7 +572,6 @@ class SparseGraphBuilderNode(RclpyNode):
         self.observed_layer = self.get_parameter('observed_layer').value
         self.trav_class = self.get_parameter('trav_class').value
         self.safe_threshold = float(self.get_parameter('safe_threshold').value)
-        self.local_map_radius = float(self.get_parameter('local_map_radius').value)
         self.local_map_resolution = float(self.get_parameter('local_map_resolution').value)
         self.max_free_radius = float(self.get_parameter('max_free_radius').value)
         self.traversable_radius = float(self.get_parameter('traversable_radius').value)

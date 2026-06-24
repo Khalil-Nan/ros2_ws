@@ -27,7 +27,6 @@ def generate_launch_description():
                 'traversability_layer': '',
                 'trav_class': 'default',
                 'safe_threshold': 0.5,
-                'local_map_radius': 10.0,
                 'local_map_resolution': 0.1,
                 'max_free_radius': 4.0,
                 'traversable_radius': 0.5,

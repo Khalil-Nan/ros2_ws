@@ -119,7 +119,6 @@ def generate_launch_description():
     graphnav_odom_topic = LaunchConfiguration('graphnav_odom_topic')
     graphnav_topic = LaunchConfiguration('graphnav_topic')
     graphnav_safe_threshold = LaunchConfiguration('graphnav_safe_threshold')
-    graphnav_local_map_radius = LaunchConfiguration('graphnav_local_map_radius')
     graphnav_edge_radius = LaunchConfiguration('graphnav_edge_radius')
     graphnav_num_samples = LaunchConfiguration('graphnav_num_samples')
     graphnav_update_min_travel = LaunchConfiguration('graphnav_update_min_travel')
@@ -492,7 +491,6 @@ def generate_launch_description():
             'observed_layer': 'elevation',
             'trav_class': 'elevation_traversability',
             'safe_threshold': graphnav_safe_threshold,
-            'local_map_radius': graphnav_local_map_radius,
             'local_map_resolution': 0.1,
             'max_free_radius': 4.0,
             'traversable_radius': 0.5,
@@ -990,7 +988,6 @@ def generate_launch_description():
         DeclareLaunchArgument('graphnav_odom_topic', default_value='/dlio/odom_node/odom'),
         DeclareLaunchArgument('graphnav_topic', default_value='/nav_graph'),
         DeclareLaunchArgument('graphnav_safe_threshold', default_value='0.2'),
-        DeclareLaunchArgument('graphnav_local_map_radius', default_value='4.5'),
         DeclareLaunchArgument('graphnav_edge_radius', default_value='8.0'),
         DeclareLaunchArgument('graphnav_num_samples', default_value='1000'),
         DeclareLaunchArgument('graphnav_update_min_travel', default_value='0.75'),
