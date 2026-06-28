@@ -24,6 +24,7 @@ def generate_launch_description():
     cuda_nvrtc_lib = '/usr/local/lib/python3.12/dist-packages/nvidia/cuda_nvrtc/lib'
     # 注意下边这种写法，左边的是变量名
     rviz = LaunchConfiguration('rviz')
+    project_rviz_config = LaunchConfiguration('project_rviz_config')
     gz_gui = LaunchConfiguration('gz_gui')
     data_source = LaunchConfiguration('data_source')
     use_sim_time = PythonExpression(["'", data_source, "'.lower() != 'go2_live'"])
@@ -193,6 +194,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             'rviz': rviz,
+            'rviz_config': project_rviz_config,
             'pointcloud_topic': pointcloud_topic,
             'imu_topic': imu_topic,
             'dlio_output': dlio_output,
@@ -208,6 +210,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             'rviz': rviz,
+            'rviz_config': project_rviz_config,
             'pointcloud_topic': pointcloud_topic,
             'imu_topic': imu_topic,
             'dlio_output': dlio_output,
@@ -223,6 +226,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             'rviz': rviz,
+            'rviz_config': project_rviz_config,
             'pointcloud_topic': pointcloud_topic,
             'imu_topic': imu_topic,
             'dlio_output': dlio_output,
@@ -238,6 +242,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             'rviz': rviz,
+            'rviz_config': project_rviz_config,
             'pointcloud_topic': go2_pointcloud_topic,
             'imu_topic': imu_topic,
             'dlio_output': dlio_output,
@@ -951,6 +956,11 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('rviz', default_value='true'),
+        DeclareLaunchArgument(
+            'project_rviz_config',
+            default_value=PathJoinSubstitution([pkg, 'rviz', 'dlio_project.rviz']),
+            description='RViz layout used by the complete DLIO project launch.',
+        ),
         DeclareLaunchArgument('gz_gui', default_value='true'),
         DeclareLaunchArgument(
             'data_source',
