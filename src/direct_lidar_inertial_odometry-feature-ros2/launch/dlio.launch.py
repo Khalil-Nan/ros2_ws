@@ -26,6 +26,7 @@ def generate_launch_description():
     dlio_output = LaunchConfiguration('dlio_output', default='log')
     dlio_extra_params = LaunchConfiguration('dlio_extra_params')
     use_sim_time = LaunchConfiguration('use_sim_time')
+    rviz_config = LaunchConfiguration('rviz_config')
 
     # Define arguments
     declare_rviz_arg = DeclareLaunchArgument(
@@ -57,6 +58,11 @@ def generate_launch_description():
         'use_sim_time',
         default_value='true',
         description='Use ROS /clock instead of the system clock'
+    )
+    declare_rviz_config_arg = DeclareLaunchArgument(
+        'rviz_config',
+        default_value=PathJoinSubstitution([current_pkg, 'launch', 'dlio.rviz']),
+        description='RViz configuration file'
     )
 
     # Load parameters
@@ -103,12 +109,11 @@ def generate_launch_description():
     )
 
     # RViz node
-    rviz_config_path = PathJoinSubstitution([current_pkg, 'launch', 'dlio.rviz'])
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
         name='dlio_rviz',
-        arguments=['-d', rviz_config_path],
+        arguments=['-d', rviz_config],
         output='screen',
         condition=IfCondition(LaunchConfiguration('rviz'))
     )
@@ -120,6 +125,7 @@ def generate_launch_description():
         declare_dlio_output_arg,
         declare_dlio_extra_params_arg,
         declare_use_sim_time_arg,
+        declare_rviz_config_arg,
         dlio_odom_node,
         dlio_map_node,
         rviz_node
