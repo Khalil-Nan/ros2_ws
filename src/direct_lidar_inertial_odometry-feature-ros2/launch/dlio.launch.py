@@ -13,6 +13,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition   
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
@@ -24,6 +25,7 @@ def generate_launch_description():
     imu_topic = LaunchConfiguration('imu_topic', default='imu_raw')
     dlio_output = LaunchConfiguration('dlio_output', default='log')
     dlio_extra_params = LaunchConfiguration('dlio_extra_params')
+    use_sim_time = LaunchConfiguration('use_sim_time')
 
     # Define arguments
     declare_rviz_arg = DeclareLaunchArgument(
@@ -51,6 +53,11 @@ def generate_launch_description():
         default_value=PathJoinSubstitution([current_pkg, 'cfg', 'empty.yaml']),
         description='Optional YAML file loaded after the default DLIO parameters'
     )
+    declare_use_sim_time_arg = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='true',
+        description='Use ROS /clock instead of the system clock'
+    )
 
     # Load parameters
     dlio_yaml_path = PathJoinSubstitution([current_pkg, 'cfg', 'dlio.yaml'])
@@ -61,7 +68,12 @@ def generate_launch_description():
         package='direct_lidar_inertial_odometry',
         executable='dlio_odom_node',
         output=dlio_output,
-        parameters=[dlio_yaml_path, dlio_params_yaml_path, dlio_extra_params],
+        parameters=[
+            dlio_yaml_path,
+            dlio_params_yaml_path,
+            dlio_extra_params,
+            {'use_sim_time': ParameterValue(use_sim_time, value_type=bool)},
+        ],
         remappings=[
             ('pointcloud', pointcloud_topic),
             ('imu', imu_topic),
@@ -79,7 +91,12 @@ def generate_launch_description():
         package='direct_lidar_inertial_odometry',
         executable='dlio_map_node',
         output=dlio_output,
-        parameters=[dlio_yaml_path, dlio_params_yaml_path, dlio_extra_params],
+        parameters=[
+            dlio_yaml_path,
+            dlio_params_yaml_path,
+            dlio_extra_params,
+            {'use_sim_time': ParameterValue(use_sim_time, value_type=bool)},
+        ],
         remappings=[
             ('keyframes', 'dlio/odom_node/pointcloud/keyframe'),
         ],
@@ -102,6 +119,7 @@ def generate_launch_description():
         declare_imu_topic_arg,
         declare_dlio_output_arg,
         declare_dlio_extra_params_arg,
+        declare_use_sim_time_arg,
         dlio_odom_node,
         dlio_map_node,
         rviz_node
